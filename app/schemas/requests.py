@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
-from app.schemas.common import APIModel, EventIdPayload, InitDataPayload
+from app.schemas.common import EventIdPayload, InitDataPayload
 
 RepeatType = Literal["none", "daily", "weekly", "monthly", "yearly"]
 CategoryType = Literal[
@@ -30,9 +30,11 @@ class EventBaseRequest(InitDataPayload):
     date: str = Field(..., min_length=10, max_length=10)
     timezone: str = Field(default="UTC", min_length=1, max_length=128)
     repeat: RepeatType = "none"
+    repeat_until: str | None = Field(default=None)
     category: CategoryType = "general"
     note: str = Field(default="", max_length=2000)
     pinned: bool = False
+    reminder_hour: int = Field(default=9, ge=0, le=23)
 
     @field_validator("title")
     @classmethod
@@ -63,6 +65,20 @@ class EventBaseRequest(InitDataPayload):
     def validate_timezone(cls, value: str) -> str:
         value = value.strip()
         return value or "UTC"
+
+    @field_validator("repeat_until")
+    @classmethod
+    def validate_repeat_until_format(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("repeat_until must be a valid date in YYYY-MM-DD format")
+        if not (1900 <= parsed.year <= 2200):
+            raise ValueError("repeat_until year must be between 1900 and 2200")
+        return value
 
     @field_validator("note")
     @classmethod

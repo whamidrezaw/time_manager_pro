@@ -12,6 +12,9 @@
  *  - Countdown ring in detail view
  *  - Note character counter
  *  - Reminder hour field support
+ *  - Reminder hour actually sent to the backend (was: silently dropped)
+ *  - Haptic feedback on save/delete/pin/error (via Telegram WebApp SDK)
+ *  - First-run onboarding overlay (3 steps, shown once via localStorage)
  */
 
 (() => {
@@ -70,6 +73,15 @@
     refreshBtn:         $("refreshBtn"),
     retryBtn:           $("retryBtn"),
     emptyAddBtn:        $("emptyAddBtn"),
+    onboardingOverlay:  $("onboardingOverlay"),
+    onboardingIcon:     $("onboardingIcon"),
+    onboardingTitle:    $("onboardingTitle"),
+    onboardingText:     $("onboardingText"),
+    onboardingDots:     $("onboardingDots"),
+    onboardingSkipBtn:  $("onboardingSkipBtn"),
+    onboardingNextBtn:  $("onboardingNextBtn"),
+    repeatUntilWrap:    $("repeatUntilWrap"),
+    repeatUntil:        $("repeatUntil"),
     searchInput:        $("searchInput"),
     filterButtons:      $$("[data-filter]"),
     eventsWrap:         $("eventsWrap"),
@@ -201,6 +213,13 @@
     els.toast.classList.add("is-visible");
     clearTimeout(_toastTimer);
     _toastTimer = setTimeout(() => els.toast.classList.remove("is-visible"), 2800);
+
+    // Native-feeling haptic nudge on meaningful outcomes (skip routine "info" toasts
+    // so this stays purposeful rather than buzzing on everything).
+    try {
+      if (type === "success") tg?.HapticFeedback?.notificationOccurred?.("success");
+      else if (type === "error") tg?.HapticFeedback?.notificationOccurred?.("error");
+    } catch (_) {}
   }
 
   /* ── Custom Confirm Dialog ──────────────────────────── */
@@ -585,6 +604,15 @@
   function handleTgBack() { if (state.activeSheet) closeSheets(); }
 
   /* ── Composer ────────────────────────────────────────── */
+  function updateRepeatUntilVisibility() {
+    if (!els.repeatUntilWrap) return;
+    const isRecurring = !!(els.repeat?.value && els.repeat.value !== "none");
+    els.repeatUntilWrap.hidden = !isRecurring;
+    if (!isRecurring && els.repeatUntil) els.repeatUntil.value = "";
+    // Can't pick an end date before the event's own start date.
+    if (els.repeatUntil && els.date?.value) els.repeatUntil.min = els.date.value;
+  }
+
   function resetComposer() {
     els.eventForm?.reset();
     if (els.eventId)        els.eventId.value       = "";
@@ -593,6 +621,7 @@
     state.editingEventId = null;
     if (els.composerTitle)    els.composerTitle.textContent    = "New Event";
     if (els.composerSubtitle) els.composerSubtitle.textContent = "Set title, date and repeat pattern.";
+    updateRepeatUntilVisibility();
     if (els.saveEventBtn)     els.saveEventBtn.innerHTML       = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
       Save Event`;
@@ -611,6 +640,9 @@
     if (els.dateJalali) els.dateJalali.value = event.date_jalali|| "";
     if (els.repeat)     els.repeat.value     = event.repeat     || "none";
     if (els.category)   els.category.value   = event.category   || "general";
+    if (els.reminderHour) els.reminderHour.value = String(event.reminder_hour ?? 9);
+    if (els.repeatUntil)  els.repeatUntil.value  = event.repeat_until || "";
+    updateRepeatUntilVisibility();
     if (els.pin)        els.pin.checked      = !!event.pinned;
     if (els.note)       els.note.value       = event.note       || "";
     if (els.noteCharCount) {
@@ -682,6 +714,8 @@
       category: els.category?.value        || "general",
       note:     els.note?.value.trim()     || "",
       pinned:   !!els.pin?.checked,
+      reminder_hour: Number(els.reminderHour?.value ?? 9),
+      repeat_until: (els.repeat?.value !== "none" && els.repeatUntil?.value) || null,
     };
 
     if (!payload.title) {
@@ -910,6 +944,8 @@
     // Form
     els.eventForm?.addEventListener("submit", submitEventForm);
     els.date?.addEventListener("change", syncJalaliFromGregorian);
+    els.date?.addEventListener("change", updateRepeatUntilVisibility);
+    els.repeat?.addEventListener("change", updateRepeatUntilVisibility);
     els.dateJalali?.addEventListener("change", syncGregorianFromJalali);
     els.dateJalali?.addEventListener("blur",   syncGregorianFromJalali);
 
@@ -947,6 +983,10 @@
     // Load more
     els.loadMoreBtn?.addEventListener("click", () => loadEvents(true));
 
+    // Onboarding
+    els.onboardingSkipBtn?.addEventListener("click", completeOnboarding);
+    els.onboardingNextBtn?.addEventListener("click", advanceOnboarding);
+
     // Keyboard
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -959,8 +999,77 @@
     });
   }
 
+  /* ── Onboarding (first run only) ────────────────────── */
+  const ONBOARDING_KEY = "tmp_onboarding_seen_v1";
+  const ONBOARDING_STEPS = [
+    {
+      icon: "🗓️",
+      title: "Never miss what matters",
+      text: "Add birthdays, appointments, and anything else you want to remember — TimeManager Pro keeps track so you don't have to.",
+    },
+    {
+      icon: "🔔",
+      title: "Reminders come straight to Telegram",
+      text: "No separate app to check. When it's time, you'll get a message right here — once, or on a repeating schedule you choose.",
+    },
+    {
+      icon: "🌗",
+      title: "Gregorian & Jalali, together",
+      text: "Every date shows in both calendars automatically. Tap the + button below to add your first event.",
+    },
+  ];
+  let onboardingStep = 0;
+
+  function showOnboardingIfNeeded() {
+    if (!els.onboardingOverlay) return;
+    try {
+      if (localStorage.getItem(ONBOARDING_KEY)) return;
+    } catch (_) {
+      return; // storage blocked (e.g. private mode) — don't force this on every load
+    }
+    onboardingStep = 0;
+    renderOnboardingStep();
+    els.onboardingOverlay.hidden = false;
+    els.onboardingOverlay.setAttribute("aria-hidden", "false");
+  }
+
+  function renderOnboardingStep() {
+    const step = ONBOARDING_STEPS[onboardingStep];
+    if (els.onboardingIcon)  els.onboardingIcon.textContent  = step.icon;
+    if (els.onboardingTitle) els.onboardingTitle.textContent = step.title;
+    if (els.onboardingText)  els.onboardingText.textContent  = step.text;
+    if (els.onboardingNextBtn) {
+      els.onboardingNextBtn.textContent =
+        onboardingStep === ONBOARDING_STEPS.length - 1 ? "Get Started" : "Next";
+    }
+    if (els.onboardingDots) {
+      [...els.onboardingDots.children].forEach((dot, i) => {
+        dot.classList.toggle("is-active", i === onboardingStep);
+      });
+    }
+  }
+
+  function advanceOnboarding() {
+    try { tg?.HapticFeedback?.selectionChanged?.(); } catch (_) {}
+    if (onboardingStep < ONBOARDING_STEPS.length - 1) {
+      onboardingStep += 1;
+      renderOnboardingStep();
+    } else {
+      completeOnboarding();
+    }
+  }
+
+  function completeOnboarding() {
+    if (els.onboardingOverlay) {
+      els.onboardingOverlay.hidden = true;
+      els.onboardingOverlay.setAttribute("aria-hidden", "true");
+    }
+    try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch (_) {}
+  }
+
   /* ── Boot ────────────────────────────────────────────── */
   initTelegram();
   bindEvents();
   loadEvents();
+  showOnboardingIfNeeded();
 })();

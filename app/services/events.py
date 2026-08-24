@@ -7,9 +7,6 @@ Fixes:
 from __future__ import annotations
 
 import logging
-
-logger = logging.getLogger("tm_pro.events")
-
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -26,6 +23,7 @@ from app.schemas.requests import (
 from app.schemas.responses import EventOut
 from app.utils.dates import (
     build_event_datetimes,
+    calc_next_notify,
     expire_for_repeat,
     safe_zoneinfo,
     to_jalali,
@@ -56,6 +54,8 @@ def serialize_event(doc: dict) -> EventOut:
         category=doc.get("category", "general"),
         pinned=bool(doc.get("pinned", False)),
         note=doc.get("note", ""),
+        reminder_hour=doc.get("reminder_hour", 9),
+        repeat_until=doc.get("repeat_until"),
     )
 
 
@@ -79,15 +79,36 @@ def _normalize_event_input(
     if category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail="INVALID_CATEGORY")
 
+    # repeat_until only makes sense for recurring events; on a one-time event
+    # it's silently ignored rather than rejected (harmless combination — e.g.
+    # a user switched repeat back to "none" without clearing this field).
+    repeat_until = payload.repeat_until if repeat != "none" else None
+    if repeat_until is not None and repeat_until < payload.date:
+        raise HTTPException(status_code=400, detail="REPEAT_UNTIL_BEFORE_START_DATE")
+
     tz, tz_name = safe_zoneinfo(payload.timezone)
     try:
         notify_utc, event_utc = build_event_datetimes(
             date_str=payload.date,
             tz=tz,
-            reminder_hour=settings.default_reminder_hour,
+            reminder_hour=payload.reminder_hour,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="INVALID_DATE") from exc
+
+    # If it's a recurring event and the chosen hour has already passed today,
+    # roll the FIRST notification forward to the next real occurrence instead
+    # of firing it immediately (build_event_datetimes has no "already past"
+    # guard on its own — calc_next_notify does, so reuse it here).
+    if repeat != "none" and notify_utc <= datetime.now(timezone.utc):
+        rolled = calc_next_notify(
+            base_date=event_utc,
+            repeat=repeat,
+            tz=tz,
+            reminder_hour=payload.reminder_hour,
+        )
+        if rolled is not None:
+            notify_utc = rolled
 
     return {
         "title":                title,
@@ -97,6 +118,8 @@ def _normalize_event_input(
         "expire_at":            expire_for_repeat(notify_utc, repeat),
         "repeat":               repeat,
         "tz_name":              tz_name,
+        "reminder_hour":        payload.reminder_hour,
+        "repeat_until":         repeat_until,
         "notify_status":        "pending",
         "notify_attempts":      0,
         "processing_started_at": None,

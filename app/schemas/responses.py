@@ -18,6 +18,8 @@ class EventOut(APIModel):
     category: str = "general"
     pinned: bool = False
     note: str = ""
+    reminder_hour: int = 9
+    repeat_until: str | None = None
 
 
 class ListEventsResponse(SuccessResponse):
