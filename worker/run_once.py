@@ -9,8 +9,6 @@ import asyncio
 import logging
 import sys
 
-import certifi
-from motor.motor_asyncio import AsyncIOMotorClient
 from telegram import Bot
 
 from app.config import get_settings

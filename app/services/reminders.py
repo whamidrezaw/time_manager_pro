@@ -108,8 +108,27 @@ async def process_due_reminders(
                     base_date=base_date,
                     repeat=repeat,
                     tz=tz,
-                    reminder_hour=settings.default_reminder_hour,
+                    reminder_hour=evt.get("reminder_hour", settings.default_reminder_hour),
                 )
+
+                repeat_until = evt.get("repeat_until")
+                stop_recurring = (
+                    repeat_until is not None
+                    and next_notify is not None
+                    and next_notify.astimezone(tz).date().isoformat() > repeat_until
+                )
+
+                if stop_recurring:
+                    await events_coll.update_one(
+                        {"_id": evt["_id"]},
+                        {
+                            "$set": {"notify_status": "done", "next_notify_at": None},
+                            "$unset": {"processing_started_at": ""},
+                        },
+                    )
+                    processed += 1
+                    continue
+
                 expire_anchor = next_notify or now
 
                 await events_coll.update_one(

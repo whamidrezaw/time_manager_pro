@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -132,7 +133,12 @@ def test_check_rate_limit_blocks_when_limit_reached() -> None:
     auth_module._rate_store.clear()
     settings = get_settings()
 
-    auth_module._rate_store["99"] = [1.0] * settings.rate_limit_count
+    # Must be RECENT timestamps — the real rate limiter correctly prunes
+    # anything older than the 60s window before counting, so seeding with
+    # ancient timestamps (e.g. 1.0) makes this test pass even when the real
+    # limiter is broken, and fail even when it's working correctly.
+    now = time.time()
+    auth_module._rate_store["99"] = [now - 1] * settings.rate_limit_count
     with pytest.raises(HTTPException) as exc:
         check_rate_limit("99", settings)
 

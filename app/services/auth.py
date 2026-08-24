@@ -11,9 +11,9 @@ import hmac
 import json
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import parse_qsl
+from urllib.parse import unquote
 
 from fastapi import HTTPException, Request
 from pymongo import ReturnDocument
@@ -83,7 +83,7 @@ async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
 # ✅ FIX: 'signature' is now excluded alongside 'hash'
 # Telegram added 'signature' field in newer clients — it must NOT be part of
 # the data_check_string, otherwise HMAC verification fails for those clients.
-_EXCLUDED_KEYS = frozenset({"hash"})
+_EXCLUDED_KEYS = frozenset({"hash", "signature"})
 
 def build_data_check_string(parsed: dict[str, str]) -> str:
     filtered = {k: v for k, v in parsed.items() if k not in _EXCLUDED_KEYS}
@@ -95,8 +95,6 @@ def compute_telegram_hash(init_data_map: dict[str, str], bot_token: str) -> str:
     secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
     return hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
-
-from urllib.parse import unquote
 
 def parse_init_data(init_data: str) -> dict[str, str]:
     if not init_data:
@@ -146,11 +144,6 @@ def validate_auth_date(
 
     if auth_date > now + max_future_skew_seconds:
         raise HTTPException(status_code=403, detail="INVALID_AUTH_DATE")
-
-
-def build_data_check_string(parsed: dict[str, str]) -> str:
-    filtered = {k: v for k, v in parsed.items() if k not in _EXCLUDED_KEYS}
-    return "\n".join(f"{key}={value}" for key, value in sorted(filtered.items()))
 
 
 async def validate_init_data(

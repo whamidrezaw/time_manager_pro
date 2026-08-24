@@ -803,6 +803,17 @@ a { color: var(--link); }
 .confirm-text { margin: 0 0 24px; color: var(--text-muted); font-size: 0.88rem; }
 .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
+/* ── Onboarding ──────────────────────────────────────── */
+.onboarding-dialog { max-width: 340px; padding-top: 36px; }
+
+.onboarding-dots { display: flex; justify-content: center; gap: 7px; margin-bottom: 24px; }
+.onboarding-dots span {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--border-strong);
+  transition: background 200ms, width 200ms;
+}
+.onboarding-dots span.is-active { width: 20px; border-radius: var(--r-pill); background: var(--brand); }
+
 /* ── Toast ───────────────────────────────────────────── */
 .toast {
   position: fixed;

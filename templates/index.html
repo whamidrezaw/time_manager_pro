@@ -216,6 +216,14 @@
             <option value="yearly">Yearly</option>
           </select>
         </div>
+        <div class="field-group" id="repeatUntilWrap" hidden>
+          <label class="field-label" for="repeatUntil">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Repeat Until
+            <span class="field-optional">(optional)</span>
+          </label>
+          <input type="date" id="repeatUntil" class="field-input">
+        </div>
         <div class="field-group">
           <label class="field-label" for="category">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
@@ -358,6 +366,22 @@
       </div>
     </article>
   </section>
+
+  <!-- ── First-run Onboarding ──────────────────────── -->
+  <div id="onboardingOverlay" class="confirm-overlay onboarding-overlay" hidden aria-hidden="true">
+    <div class="confirm-dialog onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+      <div class="confirm-icon" id="onboardingIcon">🗓️</div>
+      <h3 id="onboardingTitle" class="confirm-title">Never miss what matters</h3>
+      <p id="onboardingText" class="confirm-text">Add birthdays, appointments, and anything else you want to remember — TimeManager Pro keeps track so you don't have to.</p>
+      <div class="onboarding-dots" id="onboardingDots" aria-hidden="true">
+        <span class="is-active"></span><span></span><span></span>
+      </div>
+      <div class="confirm-actions onboarding-actions">
+        <button type="button" id="onboardingSkipBtn" class="btn-secondary">Skip</button>
+        <button type="button" id="onboardingNextBtn" class="btn-primary">Next</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ── Custom Confirm Dialog ──────────────────────── -->
   <div id="confirmOverlay" class="confirm-overlay" hidden aria-hidden="true">
