@@ -109,6 +109,7 @@ async def process_due_reminders(
                     repeat=repeat,
                     tz=tz,
                     reminder_hour=evt.get("reminder_hour", settings.default_reminder_hour),
+                    reminder_minute=evt.get("reminder_minute", 0),
                 )
 
                 repeat_until = evt.get("repeat_until")

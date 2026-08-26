@@ -19,6 +19,7 @@ class EventOut(APIModel):
     pinned: bool = False
     note: str = ""
     reminder_hour: int = 9
+    reminder_minute: int = 0
     repeat_until: str | None = None
 
 

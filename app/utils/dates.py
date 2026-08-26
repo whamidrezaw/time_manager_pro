@@ -61,11 +61,12 @@ def build_event_datetimes(
     date_str: str,
     tz: ZoneInfo,
     reminder_hour: int = 9,
+    reminder_minute: int = 0,
 ) -> tuple[datetime, datetime]:
     local_dt = datetime.strptime(date_str, "%Y-%m-%d")
     notify_local = local_dt.replace(
         hour=reminder_hour,
-        minute=0,
+        minute=reminder_minute,
         second=0,
         microsecond=0,
         tzinfo=tz,
@@ -85,6 +86,7 @@ def calc_next_notify(
     repeat: str,
     tz: ZoneInfo,
     reminder_hour: int = 9,
+    reminder_minute: int = 0,
 ) -> datetime | None:
     if repeat == "none":
         return None
@@ -92,7 +94,7 @@ def calc_next_notify(
     now_local = datetime.now(tz)
     candidate = base_date.astimezone(tz).replace(
         hour=reminder_hour,
-        minute=0,
+        minute=reminder_minute,
         second=0,
         microsecond=0,
     )

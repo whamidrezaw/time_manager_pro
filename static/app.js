@@ -111,7 +111,7 @@
     pin:                $("pin"),
     note:               $("note"),
     noteCharCount:      $("noteCharCount"),
-    reminderHour:       $("reminderHour"),
+    reminderTime:       $("reminderTime"),
 
     // Detail
     detailSheet:        $("detailSheet"),
@@ -640,7 +640,11 @@
     if (els.dateJalali) els.dateJalali.value = event.date_jalali|| "";
     if (els.repeat)     els.repeat.value     = event.repeat     || "none";
     if (els.category)   els.category.value   = event.category   || "general";
-    if (els.reminderHour) els.reminderHour.value = String(event.reminder_hour ?? 9);
+    if (els.reminderTime) {
+      const h = String(event.reminder_hour ?? 9).padStart(2, "0");
+      const m = String(event.reminder_minute ?? 0).padStart(2, "0");
+      els.reminderTime.value = `${h}:${m}`;
+    }
     if (els.repeatUntil)  els.repeatUntil.value  = event.repeat_until || "";
     updateRepeatUntilVisibility();
     if (els.pin)        els.pin.checked      = !!event.pinned;
@@ -706,6 +710,7 @@
   async function submitEventForm(e) {
     e.preventDefault();
 
+    const [timeH, timeM] = (els.reminderTime?.value || "09:00").split(":");
     const payload = {
       title:    els.title?.value.trim()    || "",
       date:     els.date?.value            || "",
@@ -714,7 +719,8 @@
       category: els.category?.value        || "general",
       note:     els.note?.value.trim()     || "",
       pinned:   !!els.pin?.checked,
-      reminder_hour: Number(els.reminderHour?.value ?? 9),
+      reminder_hour: Number(timeH ?? 9),
+      reminder_minute: Number(timeM ?? 0),
       repeat_until: (els.repeat?.value !== "none" && els.repeatUntil?.value) || null,
     };
 

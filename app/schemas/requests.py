@@ -35,6 +35,7 @@ class EventBaseRequest(InitDataPayload):
     note: str = Field(default="", max_length=2000)
     pinned: bool = False
     reminder_hour: int = Field(default=9, ge=0, le=23)
+    reminder_minute: int = Field(default=0, ge=0, le=59)
 
     @field_validator("title")
     @classmethod

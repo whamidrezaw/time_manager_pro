@@ -55,6 +55,7 @@ def serialize_event(doc: dict) -> EventOut:
         pinned=bool(doc.get("pinned", False)),
         note=doc.get("note", ""),
         reminder_hour=doc.get("reminder_hour", 9),
+        reminder_minute=doc.get("reminder_minute", 0),
         repeat_until=doc.get("repeat_until"),
     )
 
@@ -92,6 +93,7 @@ def _normalize_event_input(
             date_str=payload.date,
             tz=tz,
             reminder_hour=payload.reminder_hour,
+            reminder_minute=payload.reminder_minute,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="INVALID_DATE") from exc
@@ -106,6 +108,7 @@ def _normalize_event_input(
             repeat=repeat,
             tz=tz,
             reminder_hour=payload.reminder_hour,
+            reminder_minute=payload.reminder_minute,
         )
         if rolled is not None:
             notify_utc = rolled
@@ -119,6 +122,7 @@ def _normalize_event_input(
         "repeat":               repeat,
         "tz_name":              tz_name,
         "reminder_hour":        payload.reminder_hour,
+        "reminder_minute":      payload.reminder_minute,
         "repeat_until":         repeat_until,
         "notify_status":        "pending",
         "notify_attempts":      0,
