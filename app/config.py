@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     bot_token: str = Field(..., alias="BOT_TOKEN")
     telegram_initdata_max_age: int = Field(default=900, alias="TELEGRAM_INITDATA_MAX_AGE")
     telegram_initdata_future_skew: int = Field(default=60, alias="TELEGRAM_INITDATA_FUTURE_SKEW")
+
+    @field_validator("bot_token", mode="before")
+    @classmethod
+    def strip_bot_token(cls, value: str) -> str:
+        return value.strip() if isinstance(value, str) else value
+
 
     mongo_uri: str = Field(..., alias="MONGO_URI")
     mongo_db_name: str = Field(default="time_manager_pro", alias="MONGO_DB_NAME")
