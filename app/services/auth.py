@@ -169,12 +169,17 @@ async def validate_init_data(
 
     if not hmac.compare_digest(computed_hash, received_hash):
         client_ip = request.client.host if request.client else "unknown"
+        tok = settings.bot_token
         logger.warning(
-            "Bad Telegram initData HMAC: ip=%s received=%s… computed=%s… auth_date=%s",
+            "Bad Telegram initData HMAC: ip=%s received=%s… computed=%s… "
+            "auth_date=%s bot_token_len=%d bot_token_shape=%s…%s deploy_marker=TIMEPICKER_CI_BUILD",
             client_ip,
             received_hash[:8],
             computed_hash[:8],
             parsed.get("auth_date"),
+            len(tok),
+            tok[:4] if len(tok) >= 4 else "?",
+            tok[-4:] if len(tok) >= 4 else "?",
         )
         raise HTTPException(status_code=403, detail="BAD_HASH")
 
