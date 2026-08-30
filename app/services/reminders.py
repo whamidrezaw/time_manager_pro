@@ -4,11 +4,12 @@ import html
 import logging
 from datetime import datetime, timedelta, timezone
 
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.config import Settings, get_settings
 from app.db import get_events_collection
 from app.utils.dates import calc_next_notify, expire_for_repeat, repeat_label, safe_zoneinfo, to_jalali
+from app.utils.ids import object_id_str, safe_object_id
 
 logger = logging.getLogger("tm_pro.reminders")
 
@@ -48,6 +49,39 @@ def build_reminder_text(evt: dict) -> str:
         f"🏷️ {html.escape(category.title())}\n"
         f"🔄 {repeat_text}"
     )
+
+
+def build_reminder_keyboard(evt: dict, settings: Settings) -> InlineKeyboardMarkup:
+    event_id = object_id_str(evt["_id"])
+    deep_link = (
+        f"https://t.me/{settings.telegram_bot_username}/"
+        f"{settings.telegram_mini_app_short_name}?startapp={event_id}"
+    )
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("⏰ Snooze 1h", callback_data=f"snooze1h:{event_id}"),
+                InlineKeyboardButton("📖 Open", url=deep_link),
+            ]
+        ]
+    )
+
+
+async def handle_snooze_callback(event_id: str, telegram_user_id: int, seconds: int) -> bool:
+    try:
+        oid = safe_object_id(event_id)
+    except ValueError:
+        return False
+
+    events_coll = get_events_collection()
+    new_time = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+
+    result = await events_coll.find_one_and_update(
+        {"_id": oid, "user_id": telegram_user_id},
+        {"$set": {"next_notify_at": new_time, "notify_status": "pending"}},
+    )
+    return result is not None
 
 
 async def process_due_reminders(
@@ -95,6 +129,7 @@ async def process_due_reminders(
                 chat_id=evt["user_id"],
                 text=build_reminder_text(evt),
                 parse_mode="HTML",
+                reply_markup=build_reminder_keyboard(evt, settings),
             )
 
             repeat = evt.get("repeat", "none")

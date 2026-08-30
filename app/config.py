@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     def strip_bot_token(cls, value: str) -> str:
         return value.strip() if isinstance(value, str) else value
 
+    telegram_webhook_secret: str = Field(..., alias="TELEGRAM_WEBHOOK_SECRET")
+    telegram_bot_username: str = Field(default="Timemanager2026_bot", alias="TELEGRAM_BOT_USERNAME")
+    telegram_mini_app_short_name: str = Field(default="app", alias="TELEGRAM_MINI_APP_SHORT_NAME")
 
     mongo_uri: str = Field(..., alias="MONGO_URI")
     mongo_db_name: str = Field(default="time_manager_pro", alias="MONGO_DB_NAME")
@@ -70,6 +73,9 @@ class Settings(BaseSettings):
 
         if not self.mongo_uri.strip():
             raise ValueError("MONGO_URI must not be empty")
+
+        if not self.telegram_webhook_secret.strip():
+            raise ValueError("TELEGRAM_WEBHOOK_SECRET must not be empty")
 
         if self.max_title_len < 10:
             raise ValueError("MAX_TITLE_LEN is unrealistically low")
