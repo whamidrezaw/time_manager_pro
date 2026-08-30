@@ -8,6 +8,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
+      TELEGRAM_WEBHOOK_SECRET: "dummy_secret_for_ci_only"
       BOT_TOKEN: "123456:CI_TEST_TOKEN"
       MONGO_URI: "mongodb://127.0.0.1:27017"
       APP_ENV: "development"
