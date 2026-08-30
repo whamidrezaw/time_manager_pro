@@ -29,6 +29,7 @@ jobs:
       - name: Run reminders (one-shot)
         run: python -m worker.run_once
         env:
+          TELEGRAM_WEBHOOK_SECRET: "dummy_secret_for_worker_only"
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           MONGO_URI: ${{ secrets.MONGO_URI }}
           MONGO_DB_NAME: ${{ secrets.MONGO_DB_NAME }}
