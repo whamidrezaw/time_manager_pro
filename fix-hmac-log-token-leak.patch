@@ -1,0 +1,30 @@
+diff --git a/app/services/auth.py b/app/services/auth.py
+index 1e781af..b0c3442 100644
+--- a/app/services/auth.py
++++ b/app/services/auth.py
+@@ -162,24 +162,17 @@ async def validate_init_data(
+     if not received_hash:
+         raise HTTPException(status_code=403, detail="NO_HASH")
+ 
+-#    dcs = build_data_check_string(parsed)
+-#    logger.warning("DCS_HEX=%s", dcs.encode("utf-8").hex())
+-
+     computed_hash = compute_telegram_hash(parsed, settings.bot_token)
+ 
+     if not hmac.compare_digest(computed_hash, received_hash):
+         client_ip = request.client.host if request.client else "unknown"
+-        tok = settings.bot_token
+         logger.warning(
+             "Bad Telegram initData HMAC: ip=%s received=%s… computed=%s… "
+-            "auth_date=%s bot_token_len=%d bot_token_shape=%s…%s deploy_marker=TIMEPICKER_CI_BUILD",
++            "auth_date=%s deploy_marker=TIMEPICKER_CI_BUILD",
+             client_ip,
+             received_hash[:8],
+             computed_hash[:8],
+             parsed.get("auth_date"),
+-            len(tok),
+-            tok[:4] if len(tok) >= 4 else "?",
+-            tok[-4:] if len(tok) >= 4 else "?",
+         )
+         raise HTTPException(status_code=403, detail="BAD_HASH")
+ 
