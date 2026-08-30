@@ -1,0 +1,305 @@
+diff --git a/app/config.py b/app/config.py
+index 6fe5577..903df7e 100644
+--- a/app/config.py
++++ b/app/config.py
+@@ -33,6 +33,9 @@ class Settings(BaseSettings):
+     def strip_bot_token(cls, value: str) -> str:
+         return value.strip() if isinstance(value, str) else value
+ 
++    telegram_webhook_secret: str = Field(..., alias="TELEGRAM_WEBHOOK_SECRET")
++    telegram_bot_username: str = Field(default="Timemanager2026_bot", alias="TELEGRAM_BOT_USERNAME")
++    telegram_mini_app_short_name: str = Field(default="app", alias="TELEGRAM_MINI_APP_SHORT_NAME")
+ 
+     mongo_uri: str = Field(..., alias="MONGO_URI")
+     mongo_db_name: str = Field(default="time_manager_pro", alias="MONGO_DB_NAME")
+@@ -71,6 +74,9 @@ class Settings(BaseSettings):
+         if not self.mongo_uri.strip():
+             raise ValueError("MONGO_URI must not be empty")
+ 
++        if not self.telegram_webhook_secret.strip():
++            raise ValueError("TELEGRAM_WEBHOOK_SECRET must not be empty")
++
+         if self.max_title_len < 10:
+             raise ValueError("MAX_TITLE_LEN is unrealistically low")
+ 
+diff --git a/app/main.py b/app/main.py
+index 23df421..9a8465c 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -12,6 +12,7 @@ from app.config import get_settings
+ from app.db import close_mongo_connection, connect_to_mongo, ensure_indexes
+ from app.routes.events import router as events_router
+ from app.routes.health import router as health_router
++from app.routes.telegram import router as telegram_router
+ from app.routes.web import router as web_router
+ 
+ settings = get_settings()
+@@ -41,8 +42,12 @@ async def lifespan(app: FastAPI):
+         async with Bot(token=settings.bot_token) as bot:
+             me = await bot.get_me()
+             logger.info("Runtime bot = @%s id=%s", me.username, me.id)
++
++            webhook_url = f"{settings.webapp_base_url}/telegram/webhook"
++            await bot.set_webhook(url=webhook_url, secret_token=settings.telegram_webhook_secret)
++            logger.info("Telegram webhook set to %s", webhook_url)
+     except Exception as exc:
+-        logger.warning("Runtime bot verification failed: %s", exc)
++        logger.warning("Runtime bot verification/webhook setup failed: %s", exc)
+ 
+     await connect_to_mongo(settings)
+     await ensure_indexes(settings)
+@@ -64,3 +69,4 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+ app.include_router(health_router)
+ app.include_router(web_router)
+ app.include_router(events_router)
++app.include_router(telegram_router)
+diff --git a/app/routes/telegram.py b/app/routes/telegram.py
+new file mode 100644
+index 0000000..cac2151
+--- /dev/null
++++ b/app/routes/telegram.py
+@@ -0,0 +1,70 @@
++from __future__ import annotations
++
++import logging
++
++from fastapi import APIRouter, Header, HTTPException, Request
++from telegram import Bot, Update
++
++from app.config import get_settings
++from app.services.reminders import handle_snooze_callback
++
++logger = logging.getLogger("tm_pro.telegram")
++
++router = APIRouter(prefix="/telegram", tags=["telegram"])
++
++
++@router.post("/webhook")
++async def telegram_webhook(
++    request: Request,
++    x_telegram_bot_api_secret_token: str | None = Header(default=None),
++) -> dict:
++    settings = get_settings()
++
++    # Confirms the request genuinely came from Telegram, not just anyone who
++    # found this URL. Telegram echoes this header back on every webhook call
++    # when a secret_token was set via set_webhook (see app/main.py lifespan).
++    if x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
++        raise HTTPException(status_code=403, detail="BAD_SECRET_TOKEN")
++
++    payload = await request.json()
++
++    # Plain construction only — no network I/O, just needed so de_json can
++    # attach a bot reference to the parsed objects.
++    update = Update.de_json(payload, Bot(token=settings.bot_token))
++
++    if update and update.callback_query:
++        # A live, initialized Bot is only needed for the actual API call
++        # (answering the callback), so it's scoped to just this branch.
++        async with Bot(token=settings.bot_token) as bot:
++            await _handle_callback_query(update, bot)
++
++    return {"ok": True}
++
++
++async def _handle_callback_query(update: Update, bot: Bot) -> None:
++    query = update.callback_query
++    data = query.data or ""
++
++    try:
++        action, event_id = data.split(":", 1)
++    except ValueError:
++        await _safe_answer(bot, query.id, "Unknown action.")
++        return
++
++    if action == "snooze1h":
++        # Authorization lives in handle_snooze_callback: it matches on both
++        # _id and user_id (query.from_user.id), the same IDOR-safe pattern
++        # used everywhere else in app/services/events.py.
++        ok = await handle_snooze_callback(event_id, query.from_user.id, seconds=3600)
++        text = "⏰ Snoozed — you'll be reminded again in 1 hour." if ok else "Couldn't snooze that event."
++    else:
++        text = "Unknown action."
++
++    await _safe_answer(bot, query.id, text)
++
++
++async def _safe_answer(bot: Bot, callback_query_id: str, text: str) -> None:
++    try:
++        await bot.answer_callback_query(callback_query_id, text=text)
++    except Exception:
++        logger.exception("Failed to answer callback query id=%s", callback_query_id)
+diff --git a/app/services/reminders.py b/app/services/reminders.py
+index f25d128..d0d5529 100644
+--- a/app/services/reminders.py
++++ b/app/services/reminders.py
+@@ -4,11 +4,12 @@ import html
+ import logging
+ from datetime import datetime, timedelta, timezone
+ 
+-from telegram import Bot
++from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+ 
+ from app.config import Settings, get_settings
+ from app.db import get_events_collection
+ from app.utils.dates import calc_next_notify, expire_for_repeat, repeat_label, safe_zoneinfo, to_jalali
++from app.utils.ids import object_id_str, safe_object_id
+ 
+ logger = logging.getLogger("tm_pro.reminders")
+ 
+@@ -50,6 +51,39 @@ def build_reminder_text(evt: dict) -> str:
+     )
+ 
+ 
++def build_reminder_keyboard(evt: dict, settings: Settings) -> InlineKeyboardMarkup:
++    event_id = object_id_str(evt["_id"])
++    deep_link = (
++        f"https://t.me/{settings.telegram_bot_username}/"
++        f"{settings.telegram_mini_app_short_name}?startapp={event_id}"
++    )
++
++    return InlineKeyboardMarkup(
++        [
++            [
++                InlineKeyboardButton("⏰ Snooze 1h", callback_data=f"snooze1h:{event_id}"),
++                InlineKeyboardButton("📖 Open", url=deep_link),
++            ]
++        ]
++    )
++
++
++async def handle_snooze_callback(event_id: str, telegram_user_id: int, seconds: int) -> bool:
++    try:
++        oid = safe_object_id(event_id)
++    except ValueError:
++        return False
++
++    events_coll = get_events_collection()
++    new_time = datetime.now(timezone.utc) + timedelta(seconds=seconds)
++
++    result = await events_coll.find_one_and_update(
++        {"_id": oid, "user_id": telegram_user_id},
++        {"$set": {"next_notify_at": new_time, "notify_status": "pending"}},
++    )
++    return result is not None
++
++
+ async def process_due_reminders(
+     bot: Bot,
+     settings: Settings | None = None,
+@@ -95,6 +129,7 @@ async def process_due_reminders(
+                 chat_id=evt["user_id"],
+                 text=build_reminder_text(evt),
+                 parse_mode="HTML",
++                reply_markup=build_reminder_keyboard(evt, settings),
+             )
+ 
+             repeat = evt.get("repeat", "none")
+diff --git a/tests/conftest.py b/tests/conftest.py
+index 12b6f44..272ba31 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -20,6 +20,7 @@ os.environ["TELEGRAM_INITDATA_FUTURE_SKEW"] = "60"
+ # این‌ها را فقط اگه set نشده باشن مقداردهی می‌کنیم
+ os.environ.setdefault("BOT_TOKEN", "123456:TEST_TOKEN_FOR_PYTEST_ONLY")
+ os.environ.setdefault("MONGO_URI", "mongodb://127.0.0.1:27017")
++os.environ.setdefault("TELEGRAM_WEBHOOK_SECRET", "test-webhook-secret-for-pytest-only")
+ 
+ 
+ @pytest.fixture(scope="session")
+diff --git a/tests/test_telegram_webhook.py b/tests/test_telegram_webhook.py
+new file mode 100644
+index 0000000..a7d62e8
+--- /dev/null
++++ b/tests/test_telegram_webhook.py
+@@ -0,0 +1,90 @@
++from __future__ import annotations
++
++import pytest
++
++
++@pytest.mark.anyio
++async def test_webhook_rejects_missing_secret(async_client) -> None:
++    response = await async_client.post("/telegram/webhook", json={"update_id": 1})
++    assert response.status_code == 403
++
++
++@pytest.mark.anyio
++async def test_webhook_rejects_wrong_secret(async_client) -> None:
++    response = await async_client.post(
++        "/telegram/webhook",
++        json={"update_id": 1},
++        headers={"X-Telegram-Bot-Api-Secret-Token": "wrong"},
++    )
++    assert response.status_code == 403
++
++
++@pytest.mark.anyio
++async def test_webhook_accepts_correct_secret_no_callback(async_client) -> None:
++    from app.config import get_settings
++
++    secret = get_settings().telegram_webhook_secret
++    response = await async_client.post(
++        "/telegram/webhook",
++        json={"update_id": 1},
++        headers={"X-Telegram-Bot-Api-Secret-Token": secret},
++    )
++    assert response.status_code == 200
++    assert response.json() == {"ok": True}
++
++
++@pytest.mark.anyio
++async def test_handle_snooze_callback_updates_event_for_owner() -> None:
++    from app.services import reminders as reminders_module
++
++    calls: dict = {}
++
++    class FakeCollection:
++        async def find_one_and_update(self, query, update):
++            calls["query"] = query
++            calls["update"] = update
++            return {"_id": query["_id"]}
++
++    original = reminders_module.get_events_collection
++    reminders_module.get_events_collection = lambda: FakeCollection()
++    try:
++        ok = await reminders_module.handle_snooze_callback(
++            "507f1f77bcf86cd799439011", 12345, seconds=3600
++        )
++    finally:
++        reminders_module.get_events_collection = original
++
++    assert ok is True
++    # Same {_id, user_id} authorization pattern as the rest of the app —
++    # a snooze request can only touch an event owned by the requesting user.
++    assert calls["query"]["user_id"] == 12345
++    assert "next_notify_at" in calls["update"]["$set"]
++    assert calls["update"]["$set"]["notify_status"] == "pending"
++
++
++@pytest.mark.anyio
++async def test_handle_snooze_callback_rejects_invalid_id() -> None:
++    from app.services.reminders import handle_snooze_callback
++
++    ok = await handle_snooze_callback("not-a-valid-object-id", 12345, seconds=3600)
++    assert ok is False
++
++
++@pytest.mark.anyio
++async def test_handle_snooze_callback_returns_false_when_not_found_or_not_owner() -> None:
++    from app.services import reminders as reminders_module
++
++    class FakeCollection:
++        async def find_one_and_update(self, query, update):
++            return None  # no doc matched _id + user_id together
++
++    original = reminders_module.get_events_collection
++    reminders_module.get_events_collection = lambda: FakeCollection()
++    try:
++        ok = await reminders_module.handle_snooze_callback(
++            "507f1f77bcf86cd799439011", 99999, seconds=3600
++        )
++    finally:
++        reminders_module.get_events_collection = original
++
++    assert ok is False
