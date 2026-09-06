@@ -1,0 +1,37 @@
+# The Dockerfile does `COPY . .`, so anything not listed here ends up in the
+# image. Keeps the worker image small and free of local secrets.
+.git
+.github
+.gitignore
+.gitattributes
+.dockerignore
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+.venv/
+venv/
+env/
+
+.env
+.env.*
+!.env.example
+
+.vscode/
+.idea/
+.DS_Store
+
+tests/
+deploy/
+README.md
+LICENSE
+fix_batch2.py
+
+*.zip
+*.rar
+*.patch
+*.log

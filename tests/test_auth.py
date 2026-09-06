@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from app.config import get_settings
 from app.services.auth import (
     build_data_check_string,
     check_rate_limit,
@@ -18,7 +19,6 @@ from app.services.auth import (
     validate_auth_date,
     validate_init_data,
 )
-from app.config import get_settings
 
 
 def make_request(ip: str = "127.0.0.1"):

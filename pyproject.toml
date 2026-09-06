@@ -1,0 +1,25 @@
+# Pins the lint configuration so a new ruff release cannot change what CI
+# accepts. The rule set is deliberately conservative: it matches what the
+# code already passes today. Tightening it (I, UP, B, SIM) is a separate,
+# reviewable change rather than a surprise red build.
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+exclude = [".venv", "venv", "__pycache__", ".ruff_cache", ".pytest_cache"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "worker", "tests"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# Silences the pytest-asyncio deprecation warning by stating the scope it
+# will default to in a future release, rather than waiting to be surprised.
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-q"

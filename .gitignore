@@ -38,3 +38,8 @@ dump/
 # Build artifacts
 dist/
 build/
+
+# Archives — these do not belong in a source repo
+*.zip
+*.rar
+*.7z

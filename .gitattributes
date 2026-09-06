@@ -1,0 +1,7 @@
+# One line ending for everyone. Without this, editing a file on Windows and
+# on the GitHub web UI produces diffs where every single line looks changed.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.zip binary
