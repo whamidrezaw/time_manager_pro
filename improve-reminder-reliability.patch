@@ -1,0 +1,47 @@
+diff --git a/.github/workflows/reminder.yml b/.github/workflows/reminder.yml
+index b75ab96..20e6bd7 100644
+--- a/.github/workflows/reminder.yml
++++ b/.github/workflows/reminder.yml
+@@ -11,7 +11,7 @@ env:
+ jobs:
+   run-worker:
+     runs-on: ubuntu-latest
+-    timeout-minutes: 4
++    timeout-minutes: 6
+ 
+     steps:
+       - name: Checkout code
+@@ -36,6 +36,19 @@ jobs:
+           APP_ENV: production
+           APP_DEBUG: "false"
+           LOG_LEVEL: INFO
+-          REMINDER_BATCH_SIZE: "50"
++          REMINDER_BATCH_SIZE: "200"
+           DEFAULT_REMINDER_HOUR: "9"
+           STALE_PROCESSING_SECS: "300"
++
++      # Dead-man's-switch: healthchecks.io alerts you if this job goes
++      # quiet (disabled, broken, or GitHub having a bad day) instead of
++      # you finding out from a user complaint. Requires a free account at
++      # healthchecks.io and a HEALTHCHECK_PING_URL repo secret set to the
++      # check's ping URL, e.g. https://hc-ping.com/<your-uuid>.
++      - name: Report success to healthcheck
++        if: success()
++        run: curl -fsS -m 10 --retry 3 "${{ secrets.HEALTHCHECK_PING_URL }}" || true
++
++      - name: Report failure to healthcheck
++        if: failure()
++        run: curl -fsS -m 10 --retry 3 "${{ secrets.HEALTHCHECK_PING_URL }}/fail" || true
+diff --git a/app/config.py b/app/config.py
+index 903df7e..707be89 100644
+--- a/app/config.py
++++ b/app/config.py
+@@ -45,7 +45,7 @@ class Settings(BaseSettings):
+     max_events_per_user: int = Field(default=500, alias="MAX_EVENTS_PER_USER")
+     rate_limit_count: int = Field(default=30, alias="RATE_LIMIT_COUNT")
+ 
+-    reminder_batch_size: int = Field(default=50, alias="REMINDER_BATCH_SIZE")
++    reminder_batch_size: int = Field(default=200, alias="REMINDER_BATCH_SIZE")
+     stale_processing_secs: int = Field(default=300, alias="STALE_PROCESSING_SECS")
+     reminder_poll_interval_secs: int = Field(default=30, alias="REMINDER_POLL_INTERVAL_SECS")
+     default_reminder_hour: int = Field(default=9, alias="DEFAULT_REMINDER_HOUR")
