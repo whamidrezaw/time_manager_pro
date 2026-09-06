@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -12,6 +13,24 @@ STATIC_DIR = BASE_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(tags=["web"])
+
+
+def _compute_asset_version() -> str:
+    """Short digest of the shipped CSS/JS, used as a cache-busting query param.
+
+    Computed once at import time. Without it the browser keeps serving the
+    app.js/style.css it cached before the deploy, so users never see a new
+    build — which would quietly swallow any front-end fix.
+    """
+    digest = hashlib.sha256()
+    for name in ("style.css", "app.js"):
+        path = STATIC_DIR / name
+        if path.exists():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:10]
+
+
+ASSET_VERSION = _compute_asset_version()
 
 @router.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
 async def root(request: Request):
@@ -31,5 +50,6 @@ async def render_webapp(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={},
+        context={"asset_version": ASSET_VERSION},
+        headers={"Cache-Control": "no-store"},
     )
