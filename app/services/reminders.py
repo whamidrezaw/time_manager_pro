@@ -68,17 +68,27 @@ def build_reminder_keyboard(evt: dict, settings: Settings) -> InlineKeyboardMark
     )
 
 
-async def handle_snooze_callback(event_id: str, telegram_user_id: int, seconds: int) -> bool:
+async def handle_snooze_callback(
+    event_id: str,
+    telegram_user_id: int | str,
+    seconds: int,
+) -> bool:
     try:
         oid = safe_object_id(event_id)
     except ValueError:
         return False
 
+    # user_id is persisted as a string everywhere (see app/services/auth.py),
+    # while Telegram hands us an int on callback queries. MongoDB matches on
+    # the exact BSON type, so without this cast the filter never matches and
+    # every snooze silently fails.
+    user_id = str(telegram_user_id)
+
     events_coll = get_events_collection()
     new_time = datetime.now(timezone.utc) + timedelta(seconds=seconds)
 
     result = await events_coll.find_one_and_update(
-        {"_id": oid, "user_id": telegram_user_id},
+        {"_id": oid, "user_id": user_id},
         {"$set": {"next_notify_at": new_time, "notify_status": "pending"}},
     )
     return result is not None
