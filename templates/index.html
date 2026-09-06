@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_version }}">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -391,6 +391,6 @@
   <!-- ── Toast ─────────────────────────────────────── -->
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v={{ asset_version }}" defer></script>
 </body>
 </html>
