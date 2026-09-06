@@ -173,6 +173,21 @@
   };
 
   /* ── Telegram Theme ─────────────────────────────────── */
+  // Telegram themeParams key -> CSS custom property read by style.css.
+  // Every one of these has a fallback in the stylesheet, so a client that
+  // sends only half of them still renders correctly.
+  const TG_THEME_MAP = {
+    bg_color:                "--tg-bg",
+    secondary_bg_color:      "--tg-bg-2",
+    section_bg_color:        "--tg-surface",
+    text_color:              "--tg-text",
+    subtitle_text_color:     "--tg-text-2",
+    hint_color:              "--tg-text-muted",
+    section_separator_color: "--tg-border",
+    link_color:              "--tg-link",
+    destructive_text_color:  "--tg-danger",
+  };
+
   function initTelegram() {
     try {
       applyTelegramTheme();
@@ -182,13 +197,24 @@
   }
 
   function applyTelegramTheme() {
-    if (!tg?.themeParams) return;
-    const p = tg.themeParams;
-    const r = document.documentElement;
-    if (p.bg_color) r.style.setProperty("--tg-bg", p.bg_color);
-    if (p.text_color) r.style.setProperty("--tg-text", p.text_color);
-    if (p.button_color) r.style.setProperty("--tg-primary", p.button_color);
-    if (p.destructive_text_color) r.style.setProperty("--tg-danger", p.destructive_text_color);
+    const root = document.documentElement;
+    const params = tg?.themeParams || {};
+
+    Object.entries(TG_THEME_MAP).forEach(([key, cssVar]) => {
+      const value = params[key];
+      if (typeof value === "string" && value.trim()) {
+        root.style.setProperty(cssVar, value.trim());
+      } else {
+        // Client didn't send this one — drop back to the stylesheet default
+        // instead of keeping a stale value from the previous theme.
+        root.style.removeProperty(cssVar);
+      }
+    });
+
+    // Inside the Telegram WebView tg.colorScheme is authoritative:
+    // prefers-color-scheme reports the OS setting, which can disagree with
+    // the theme the user actually chose in Telegram.
+    root.setAttribute("data-tg-scheme", tg?.colorScheme === "dark" ? "dark" : "light");
   }
 
   /* ── Loading / Status ───────────────────────────────── */
