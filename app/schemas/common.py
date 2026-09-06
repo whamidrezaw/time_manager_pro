@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,6 +25,26 @@ class APIModel(BaseModel):
         str_strip_whitespace=True,
         populate_by_name=True,
     )
+
+
+MAX_REMINDERS_PER_EVENT = 3
+
+
+class ReminderSpec(APIModel):
+    """One reminder on an event.
+
+    mode="absolute" fires at hour:minute on the day of the event, which is the
+    only thing that makes sense for an all-day event. mode="relative" fires
+    offset_minutes before a timed event starts.
+
+    The UI currently exposes one reminder per event; the list shape is here so
+    that raising that later needs no schema migration.
+    """
+
+    mode: Literal["absolute", "relative"] = "absolute"
+    hour: int = Field(default=9, ge=0, le=23)
+    minute: int = Field(default=0, ge=0, le=59)
+    offset_minutes: int = Field(default=0, ge=0, le=43200)
 
 
 class InitDataPayload(APIModel):

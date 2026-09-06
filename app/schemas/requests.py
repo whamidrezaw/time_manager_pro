@@ -5,7 +5,12 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
-from app.schemas.common import EventIdPayload, InitDataPayload
+from app.schemas.common import (
+    MAX_REMINDERS_PER_EVENT,
+    EventIdPayload,
+    InitDataPayload,
+    ReminderSpec,
+)
 
 RepeatType = Literal["none", "daily", "weekly", "monthly", "yearly"]
 CategoryType = Literal[
@@ -34,6 +39,14 @@ class EventBaseRequest(InitDataPayload):
     category: CategoryType = "general"
     note: str = Field(default="", max_length=2000)
     pinned: bool = False
+    all_day: bool = True
+    time_hm: str | None = Field(default=None, max_length=5)
+    reminders: list[ReminderSpec] = Field(
+        default_factory=list,
+        max_length=MAX_REMINDERS_PER_EVENT,
+    )
+    # Kept so that a client which has not been updated yet still schedules
+    # correctly: an empty `reminders` list falls back to this pair.
     reminder_hour: int = Field(default=9, ge=0, le=23)
     reminder_minute: int = Field(default=0, ge=0, le=59)
 
@@ -80,6 +93,18 @@ class EventBaseRequest(InitDataPayload):
         if not (1900 <= parsed.year <= 2200):
             raise ValueError("repeat_until year must be between 1900 and 2200")
         return value
+
+    @field_validator("time_hm")
+    @classmethod
+    def validate_time_hm(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        try:
+            parsed = datetime.strptime(value, "%H:%M")
+        except ValueError:
+            raise ValueError("time_hm must be a valid time in HH:MM format") from None
+        return parsed.strftime("%H:%M")
 
     @field_validator("note")
     @classmethod

@@ -9,8 +9,10 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from app.config import Settings, get_settings
 from app.db import get_events_collection
 from app.utils.dates import (
-    calc_next_notify,
+    earliest_fire,
     expire_for_repeat,
+    next_schedule,
+    normalize_reminders,
     repeat_label,
     safe_zoneinfo,
     to_jalali,
@@ -39,6 +41,17 @@ async def recover_stale_processing(settings: Settings | None = None) -> int:
     return int(result.modified_count)
 
 
+def event_reminder_specs(evt: dict) -> list[dict]:
+    """Reminder list for a stored event, rebuilt from the legacy hour/minute
+    pair when the document predates the `reminders` field."""
+    return normalize_reminders(
+        evt.get("reminders"),
+        all_day=bool(evt.get("all_day", True)),
+        legacy_hour=evt.get("reminder_hour", 9),
+        legacy_minute=evt.get("reminder_minute", 0),
+    )
+
+
 def build_reminder_text(evt: dict) -> str:
     repeat = evt.get("repeat", "none")
     repeat_text = repeat_label(repeat)
@@ -48,10 +61,15 @@ def build_reminder_text(evt: dict) -> str:
     pin_mark = "📌 " if evt.get("pinned") else ""
     title = html.escape(evt.get("title", ""))
 
+    time_line = ""
+    if not evt.get("all_day", True) and evt.get("time_hm"):
+        time_line = f"🕒 {html.escape(str(evt['time_hm']))}\n"
+
     return (
         f"🔔 <b>Reminder</b>\n"
         f"{pin_mark}{title}\n"
         f"📅 {date_iso}  •  {jalali_date}\n"
+        f"{time_line}"
         f"🏷️ {html.escape(category.title())}\n"
         f"🔄 {repeat_text}"
     )
@@ -150,27 +168,35 @@ async def process_due_reminders(
 
             repeat = evt.get("repeat", "none")
             tz, _ = safe_zoneinfo(evt.get("tz_name", "UTC"))
-            base_date = evt.get("event_ts_utc", now)
-            if base_date.tzinfo is None:
-                base_date = base_date.replace(tzinfo=timezone.utc)
+            occurrence = evt.get("event_ts_utc", now)
+            if occurrence.tzinfo is None:
+                occurrence = occurrence.replace(tzinfo=timezone.utc)
 
             if repeat != "none":
-                next_notify = calc_next_notify(
-                    base_date=base_date,
-                    repeat=repeat,
-                    tz=tz,
-                    reminder_hour=evt.get("reminder_hour", settings.default_reminder_hour),
-                    reminder_minute=evt.get("reminder_minute", 0),
+                specs = event_reminder_specs(evt)
+                date_iso_raw = evt.get("date_iso", "")
+                anchor_day = (
+                    int(date_iso_raw[8:10]) if len(date_iso_raw) == 10 else occurrence.day
                 )
 
-                repeat_until = evt.get("repeat_until")
-                stop_recurring = (
-                    repeat_until is not None
-                    and next_notify is not None
-                    and next_notify.astimezone(tz).date().isoformat() > repeat_until
-                )
+                # Another reminder on the same occurrence may still be ahead.
+                # Only one is exposed in the UI today, but the stored shape is a
+                # list, so drain the current occurrence before moving on.
+                next_occurrence = occurrence
+                next_notify = earliest_fire(specs, occurrence, tz, after=now)
 
-                if stop_recurring:
+                if next_notify is None:
+                    next_occurrence, next_notify = next_schedule(
+                        occurrence_utc=occurrence,
+                        anchor_day=anchor_day,
+                        tz=tz,
+                        reminders=specs,
+                        repeat=repeat,
+                        repeat_until=evt.get("repeat_until"),
+                        now=now,
+                    )
+
+                if next_notify is None:
                     await events_coll.update_one(
                         {"_id": evt["_id"]},
                         {
@@ -181,15 +207,17 @@ async def process_due_reminders(
                     processed += 1
                     continue
 
-                expire_anchor = next_notify or now
-
                 await events_coll.update_one(
                     {"_id": evt["_id"]},
                     {
                         "$set": {
                             "notify_status": "pending",
                             "next_notify_at": next_notify,
-                            "expire_at": expire_for_repeat(expire_anchor, repeat),
+                            # Moving the occurrence forward as well keeps the
+                            # list sorted on the NEXT date rather than on the
+                            # date the series originally started.
+                            "event_ts_utc": next_occurrence,
+                            "expire_at": expire_for_repeat(next_notify, repeat),
                             "notify_attempts": 0,
                         },
                         "$unset": {"processing_started_at": ""},

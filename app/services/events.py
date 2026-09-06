@@ -22,9 +22,9 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import EventOut
 from app.utils.dates import (
-    build_event_datetimes,
-    calc_next_notify,
     expire_for_repeat,
+    first_schedule,
+    normalize_reminders,
     safe_zoneinfo,
     to_jalali,
 )
@@ -43,6 +43,7 @@ VALID_CATEGORIES = {
 
 def serialize_event(doc: dict) -> EventOut:
     date_iso = doc.get("date_iso", "")
+    all_day = bool(doc.get("all_day", True))
     return EventOut(
         id=str(doc["_id"]),
         title=doc.get("title", ""),
@@ -54,6 +55,17 @@ def serialize_event(doc: dict) -> EventOut:
         category=doc.get("category", "general"),
         pinned=bool(doc.get("pinned", False)),
         note=doc.get("note", ""),
+        all_day=all_day,
+        time_hm=doc.get("time_hm"),
+        # Documents written before this field existed have no "reminders" key;
+        # normalize_reminders rebuilds it from the legacy hour/minute pair, so
+        # no migration pass over the collection is needed.
+        reminders=normalize_reminders(
+            doc.get("reminders"),
+            all_day=all_day,
+            legacy_hour=doc.get("reminder_hour", 9),
+            legacy_minute=doc.get("reminder_minute", 0),
+        ),
         reminder_hour=doc.get("reminder_hour", 9),
         reminder_minute=doc.get("reminder_minute", 0),
         repeat_until=doc.get("repeat_until"),
@@ -87,44 +99,59 @@ def _normalize_event_input(
     if repeat_until is not None and repeat_until < payload.date:
         raise HTTPException(status_code=400, detail="REPEAT_UNTIL_BEFORE_START_DATE")
 
+    all_day = bool(payload.all_day)
+    time_hm = (payload.time_hm or "").strip() or None
+    if not all_day and time_hm is None:
+        raise HTTPException(status_code=400, detail="TIME_REQUIRED")
+    if all_day:
+        time_hm = None
+
+    reminders = normalize_reminders(
+        [spec.model_dump() for spec in payload.reminders],
+        all_day=all_day,
+        legacy_hour=payload.reminder_hour,
+        legacy_minute=payload.reminder_minute,
+    )
+
     tz, tz_name = safe_zoneinfo(payload.timezone)
     try:
-        notify_utc, event_utc = build_event_datetimes(
+        event_utc, notify_utc = first_schedule(
             date_str=payload.date,
             tz=tz,
-            reminder_hour=payload.reminder_hour,
-            reminder_minute=payload.reminder_minute,
+            all_day=all_day,
+            time_hm=time_hm,
+            reminders=reminders,
+            repeat=repeat,
+            repeat_until=repeat_until,
+            now=datetime.now(timezone.utc),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="INVALID_DATE") from exc
 
-    # If it's a recurring event and the chosen hour has already passed today,
-    # roll the FIRST notification forward to the next real occurrence instead
-    # of firing it immediately (build_event_datetimes has no "already past"
-    # guard on its own — calc_next_notify does, so reuse it here).
-    if repeat != "none" and notify_utc <= datetime.now(timezone.utc):
-        rolled = calc_next_notify(
-            base_date=event_utc,
-            repeat=repeat,
-            tz=tz,
-            reminder_hour=payload.reminder_hour,
-            reminder_minute=payload.reminder_minute,
-        )
-        if rolled is not None:
-            notify_utc = rolled
+    # notify_utc is None only when there is nothing left to fire — a recurring
+    # series that has already run past its repeat_until. Storing "pending" with
+    # no time would leave the document stuck in the worker's queue for ever.
+    first_absolute = next(
+        (spec for spec in reminders if spec["mode"] == "absolute"),
+        None,
+    )
 
     return {
         "title":                title,
         "date_iso":             payload.date,
+        "all_day":              all_day,
+        "time_hm":              time_hm,
+        "reminders":            reminders,
         "next_notify_at":       notify_utc,
         "event_ts_utc":         event_utc,
-        "expire_at":            expire_for_repeat(notify_utc, repeat),
+        "expire_at":            expire_for_repeat(notify_utc or event_utc, repeat),
         "repeat":               repeat,
         "tz_name":              tz_name,
-        "reminder_hour":        payload.reminder_hour,
-        "reminder_minute":      payload.reminder_minute,
+        # Kept in sync for clients that still read the flat pair.
+        "reminder_hour":        (first_absolute or {}).get("hour", payload.reminder_hour),
+        "reminder_minute":      (first_absolute or {}).get("minute", payload.reminder_minute),
         "repeat_until":         repeat_until,
-        "notify_status":        "pending",
+        "notify_status":        "pending" if notify_utc is not None else "done",
         "notify_attempts":      0,
         "processing_started_at": None,
         "category":             category,

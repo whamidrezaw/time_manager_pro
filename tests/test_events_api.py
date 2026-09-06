@@ -212,3 +212,71 @@ async def test_root_redirects_to_webapp(async_client) -> None:
     response = await async_client.get("/", follow_redirects=False)
     assert response.status_code == 302
     assert response.headers["location"] == "/webapp"
+
+
+def _event_payload(**overrides):
+    from app.schemas.requests import AddEventRequest
+
+    base = {
+        "initData": "dummy",
+        "title": "Standup",
+        "date": "2099-04-20",
+        "timezone": "Europe/Berlin",
+        "repeat": "none",
+    }
+    base.update(overrides)
+    return AddEventRequest(**base)
+
+
+def test_normalize_event_input_defaults_to_an_all_day_event() -> None:
+    """A client that has not been updated sends neither all_day nor reminders;
+    it must keep producing exactly the old schedule."""
+    from app.services.events import _normalize_event_input
+
+    doc = _normalize_event_input(_event_payload(reminder_hour=7, reminder_minute=30))
+
+    assert doc["all_day"] is True
+    assert doc["time_hm"] is None
+    assert doc["reminders"] == [{"mode": "absolute", "hour": 7, "minute": 30}]
+    assert doc["reminder_hour"] == 7
+    assert doc["notify_status"] == "pending"
+
+
+def test_normalize_event_input_schedules_a_relative_reminder() -> None:
+    from datetime import timedelta
+
+    from app.services.events import _normalize_event_input
+
+    doc = _normalize_event_input(
+        _event_payload(
+            all_day=False,
+            time_hm="14:30",
+            reminders=[{"mode": "relative", "offset_minutes": 60}],
+        )
+    )
+
+    assert doc["all_day"] is False
+    assert doc["time_hm"] == "14:30"
+    assert doc["event_ts_utc"] - doc["next_notify_at"] == timedelta(minutes=60)
+
+
+def test_normalize_event_input_requires_a_time_when_not_all_day() -> None:
+    from fastapi import HTTPException
+
+    from app.services.events import _normalize_event_input
+
+    with pytest.raises(HTTPException) as excinfo:
+        _normalize_event_input(_event_payload(all_day=False))
+
+    assert excinfo.value.detail == "TIME_REQUIRED"
+
+
+def test_normalize_event_input_marks_a_finished_series_done() -> None:
+    from app.services.events import _normalize_event_input
+
+    doc = _normalize_event_input(
+        _event_payload(date="2020-01-01", repeat="daily", repeat_until="2020-01-02")
+    )
+
+    assert doc["next_notify_at"] is None
+    assert doc["notify_status"] == "done"
