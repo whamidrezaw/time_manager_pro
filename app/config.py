@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     max_events_per_user: int = Field(default=500, alias="MAX_EVENTS_PER_USER")
     rate_limit_count: int = Field(default=30, alias="RATE_LIMIT_COUNT")
 
-    reminder_batch_size: int = Field(default=50, alias="REMINDER_BATCH_SIZE")
+    reminder_batch_size: int = Field(default=200, alias="REMINDER_BATCH_SIZE")
     stale_processing_secs: int = Field(default=300, alias="STALE_PROCESSING_SECS")
     reminder_poll_interval_secs: int = Field(default=30, alias="REMINDER_POLL_INTERVAL_SECS")
     default_reminder_hour: int = Field(default=9, alias="DEFAULT_REMINDER_HOUR")
