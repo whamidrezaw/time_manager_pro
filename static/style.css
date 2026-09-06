@@ -17,24 +17,24 @@
   --brand-soft: rgba(91, 108, 248, 0.12);
   --brand-text: #ffffff;
 
-  /* Surfaces */
-  --bg: #f0f2ff;
-  --surface: #ffffff;
-  --surface-2: #f7f8ff;
-  --border: rgba(91, 108, 248, 0.13);
+  /* Surfaces — Telegram first, original palette as fallback */
+  --bg: var(--tg-bg, #f0f2ff);
+  --surface: var(--tg-surface, #ffffff);
+  --surface-2: var(--tg-bg-2, #f7f8ff);
+  --border: var(--tg-border, rgba(91, 108, 248, 0.13));
   --border-strong: rgba(91, 108, 248, 0.22);
 
-  /* Text */
-  --text: #1a1d3a;
-  --text-2: #4a4e78;
-  --text-muted: #8890b8;
+  /* Text — Telegram first, original palette as fallback */
+  --text: var(--tg-text, #1a1d3a);
+  --text-2: var(--tg-text-2, #4a4e78);
+  --text-muted: var(--tg-text-muted, #8890b8);
 
   /* Semantic */
-  --danger: #ef4444;
+  --danger: var(--tg-danger, #ef4444);
   --danger-soft: rgba(239, 68, 68, 0.1);
   --success: #10b981;
   --warning: #f59e0b;
-  --link: #5b6cf8;
+  --link: var(--tg-link, #5b6cf8);
 
   /* Category Colors */
   --cat-general:  #5b6cf8;
@@ -80,19 +80,52 @@
   --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
-/* Dark mode */
+/* ── Dark mode ──────────────────────────────────────────
+   Two triggers, one set of tokens:
+     1. prefers-color-scheme  — first paint, before app.js runs
+     2. [data-tg-scheme]      — set by app.js from tg.colorScheme and
+        authoritative, because it wins on specificity and source order.
+   Both keep the var(--tg-*) binding, so a palette supplied by Telegram
+   still overrides these fallbacks. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1024;
-    --surface: #1a1d38;
-    --surface-2: #1f2340;
-    --border: rgba(91, 108, 248, 0.18);
-    --text: #eef0ff;
-    --text-2: #a8b0d8;
-    --text-muted: #5a6090;
+    --bg: var(--tg-bg, #0f1024);
+    --surface: var(--tg-surface, #1a1d38);
+    --surface-2: var(--tg-bg-2, #1f2340);
+    --border: var(--tg-border, rgba(91, 108, 248, 0.18));
+    --text: var(--tg-text, #eef0ff);
+    --text-2: var(--tg-text-2, #a8b0d8);
+    --text-muted: var(--tg-text-muted, #5a6090);
     --shadow-card: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
   }
 }
+
+:root[data-tg-scheme="dark"] {
+  --bg: var(--tg-bg, #0f1024);
+  --surface: var(--tg-surface, #1a1d38);
+  --surface-2: var(--tg-bg-2, #1f2340);
+  --border: var(--tg-border, rgba(91, 108, 248, 0.18));
+  --text: var(--tg-text, #eef0ff);
+  --text-2: var(--tg-text-2, #a8b0d8);
+  --text-muted: var(--tg-text-muted, #5a6090);
+  --shadow-card: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
+}
+
+/* Telegram light while the OS is dark — undo the media query above. */
+:root[data-tg-scheme="light"] {
+  --bg: var(--tg-bg, #f0f2ff);
+  --surface: var(--tg-surface, #ffffff);
+  --surface-2: var(--tg-bg-2, #f7f8ff);
+  --border: var(--tg-border, rgba(91, 108, 248, 0.13));
+  --text: var(--tg-text, #1a1d3a);
+  --text-2: var(--tg-text-2, #4a4e78);
+  --text-muted: var(--tg-text-muted, #8890b8);
+  --shadow-card: 0 2px 8px rgba(26, 29, 58, 0.06), 0 0 0 1px var(--border);
+}
+
+/* Keeps native controls (the date and time pickers) in the same scheme. */
+html[data-tg-scheme="dark"]  { color-scheme: dark; }
+html[data-tg-scheme="light"] { color-scheme: light; }
 
 /* ── Reset ──────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
