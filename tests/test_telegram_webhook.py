@@ -57,7 +57,8 @@ async def test_handle_snooze_callback_updates_event_for_owner() -> None:
     assert ok is True
     # Same {_id, user_id} authorization pattern as the rest of the app —
     # a snooze request can only touch an event owned by the requesting user.
-    assert calls["query"]["user_id"] == 12345
+    # Regression guard: Telegram sends an int, the DB stores a string.
+    assert calls["query"]["user_id"] == "12345"
     assert "next_notify_at" in calls["update"]["$set"]
     assert calls["update"]["$set"]["notify_status"] == "pending"
 
@@ -88,3 +89,21 @@ async def test_handle_snooze_callback_returns_false_when_not_found_or_not_owner(
         reminders_module.get_events_collection = original
 
     assert ok is False
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("/start", "/start"),
+        ("/start@Timemanager2026_bot", "/start"),
+        ("/START deep-link-payload", "/start"),
+        ("/help", "/help"),
+        ("  /help  ", "/help"),
+        ("hello there", ""),
+        ("", ""),
+    ],
+)
+def test_parse_command(text: str, expected: str) -> None:
+    from app.routes.telegram import parse_command
+
+    assert parse_command(text) == expected
