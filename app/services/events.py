@@ -140,6 +140,7 @@ def _normalize_event_input(
     return {
         "title":                title,
         "date_iso":             payload.date,
+        "lang":                 payload.lang,
         # Stored, not just computed on read: the Jalali date has to be in the
         # document for a Mongo query to be able to search it.
         "date_jalali":          to_jalali(payload.date),

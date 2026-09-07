@@ -7,33 +7,12 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 
 from app.config import Settings, get_settings
 from app.services.reminders import handle_snooze_callback
+from app.utils.i18n import resolve_language, t
 
 logger = logging.getLogger("tm_pro.telegram")
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
-_START_TEXT = (
-    "👋 <b>Welcome to TimeManager Pro!</b>\n\n"
-    "Save birthdays, meetings and anything else you need to remember — and get "
-    "the reminder right here in Telegram, on both the Gregorian and the Jalali "
-    "calendar.\n\n"
-    "Tap the button below to open the app and add your first event."
-)
-
-_HELP_TEXT = (
-    "<b>TimeManager Pro — Help</b>\n\n"
-    "/start — open the app and see the welcome message\n"
-    "/help — show this message\n\n"
-    "Everything else happens inside the Mini App: add, edit, pin and delete "
-    "events, write notes, and pick the exact time you want to be reminded.\n\n"
-    "When a reminder arrives, tap <b>⏰ Snooze 1h</b> to push it back an hour, "
-    "or <b>📖 Open</b> to jump straight to that event."
-)
-
-_FALLBACK_TEXT = (
-    "I don't understand plain text messages yet 🙂\n\n"
-    "Send /help to see what I can do, or open the app with the button below."
-)
 
 
 @router.post("/webhook")
@@ -70,13 +49,13 @@ async def telegram_webhook(
     return {"ok": True}
 
 
-def build_open_app_keyboard(settings: Settings) -> InlineKeyboardMarkup:
+def build_open_app_keyboard(settings: Settings, language: str = "en") -> InlineKeyboardMarkup:
     deep_link = (
         f"https://t.me/{settings.telegram_bot_username}/"
         f"{settings.telegram_mini_app_short_name}"
     )
     return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("📅 Open TimeManager Pro", url=deep_link)]]
+        [[InlineKeyboardButton(t("open_app_button", language), url=deep_link)]]
     )
 
 
@@ -96,19 +75,23 @@ async def _handle_message(update: Update, bot: Bot, settings: Settings) -> None:
     message = update.message
     command = parse_command(message.text or "")
 
+    # No storage needed here: Telegram hands us the sender's language on every
+    # update, so a user who switches language sees the change immediately.
+    language = resolve_language(getattr(message.from_user, "language_code", None))
+
     if command == "/start":
-        text = _START_TEXT
+        key = "start"
     elif command == "/help":
-        text = _HELP_TEXT
+        key = "help"
     else:
-        text = _FALLBACK_TEXT
+        key = "fallback"
 
     try:
         await bot.send_message(
             chat_id=message.chat_id,
-            text=text,
+            text=t(key, language),
             parse_mode="HTML",
-            reply_markup=build_open_app_keyboard(settings),
+            reply_markup=build_open_app_keyboard(settings, language),
         )
     except Exception:
         logger.exception("Failed to reply to chat_id=%s", message.chat_id)
@@ -117,11 +100,12 @@ async def _handle_message(update: Update, bot: Bot, settings: Settings) -> None:
 async def _handle_callback_query(update: Update, bot: Bot) -> None:
     query = update.callback_query
     data = query.data or ""
+    language = resolve_language(getattr(query.from_user, "language_code", None))
 
     try:
         action, event_id = data.split(":", 1)
     except ValueError:
-        await _safe_answer(bot, query.id, "Unknown action.")
+        await _safe_answer(bot, query.id, t("unknown_action", language))
         return
 
     if action == "snooze1h":
@@ -129,9 +113,9 @@ async def _handle_callback_query(update: Update, bot: Bot) -> None:
         # _id and user_id (query.from_user.id), the same IDOR-safe pattern
         # used everywhere else in app/services/events.py.
         ok = await handle_snooze_callback(event_id, query.from_user.id, seconds=3600)
-        text = "⏰ Snoozed — you'll be reminded again in 1 hour." if ok else "Couldn't snooze that event."
+        text = t("snoozed" if ok else "snooze_failed", language)
     else:
-        text = "Unknown action."
+        text = t("unknown_action", language)
 
     await _safe_answer(bot, query.id, text)
 

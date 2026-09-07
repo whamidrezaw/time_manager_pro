@@ -160,6 +160,243 @@
     other:   "📌 Other",
   };
 
+  /* ── Language ────────────────────────────────────────── */
+  // Keyed by the English source string rather than by an invented id: the
+  // template needs no data-i18n attributes, so translating it is a DOM pass
+  // instead of 99 markup edits, and any string with no entry simply stays
+  // English. Only Persian is offered besides English — that is deliberate, not
+  // a gap: Persian serves the audience the Jalali calendar is here for, and
+  // English serves everyone else.
+  const TRANSLATIONS = {
+    fa: {
+      // Shell
+      "Skip to content": "پرش به محتوا",
+      "JavaScript Required": "جاوااسکریپت لازم است",
+      "Please enable JavaScript to use TimeManager Pro.": "برای استفاده از تایم‌منیجر پرو جاوااسکریپت را فعال کنید.",
+      "Smart reminders in Telegram": "یادآوری هوشمند در تلگرام",
+      "✨ Your Personal Planner": "✨ برنامه‌ریز شخصی شما",
+      "Stay on top of every moment": "هیچ لحظه‌ای را از دست ندهید",
+      "Save events, birthdays & tasks — get reminders directly in Telegram.": "رویدادها، تولدها و کارها را ذخیره کنید و یادآوری‌شان را در تلگرام بگیرید.",
+      "Events": "رویداد",
+      "Ready": "آماده",
+      "Status": "وضعیت",
+      "Refresh events": "بارگذاری دوباره",
+      "Refresh": "بارگذاری دوباره",
+
+      // Filters and search
+      "Filters and search": "فیلتر و جست‌وجو",
+      "Category filter": "فیلتر دسته",
+      "Search events…": "جست‌وجوی رویداد…",
+      "Event list": "فهرست رویدادها",
+      "🌐 All": "🌐 همه",
+      "📌 Pinned": "📌 سنجاق‌شده",
+      "🎂 Birthday": "🎂 تولد",
+      "💼 Work": "💼 کاری",
+      "❤️ Health": "❤️ سلامت",
+      "👨‍👩‍👧 Family": "👨‍👩‍👧 خانواده",
+      "✈️ Travel": "✈️ سفر",
+      "💰 Finance": "💰 مالی",
+      "📚 Study": "📚 درسی",
+      "🌐 General": "🌐 عمومی",
+      "📌 Other": "📌 سایر",
+
+      // Empty, error and result states
+      "No events yet!": "هنوز رویدادی ندارید!",
+      "Add your first event and start receiving smart reminders directly in Telegram.": "اولین رویدادتان را اضافه کنید و یادآوری‌ها را در تلگرام دریافت کنید.",
+      "Add your first event": "افزودن اولین رویداد",
+      "🎂 Birthdays": "🎂 تولدها",
+      "💼 Meetings": "💼 جلسه‌ها",
+      "❤️ Appointments": "❤️ قرارها",
+      "✈️ Travel": "✈️ سفر",
+      "Something went wrong": "مشکلی پیش آمد",
+      "Could not connect to the server. Please check your connection and try again.": "اتصال به سرور ممکن نشد. اینترنت را بررسی و دوباره تلاش کنید.",
+      "Try again": "تلاش دوباره",
+      "No results found": "چیزی پیدا نشد",
+      "Try a different search term or filter.": "عبارت یا فیلتر دیگری را امتحان کنید.",
+      "Load more events": "رویدادهای بیشتر",
+
+      // Composer
+      "Add event": "افزودن رویداد",
+      "Add Event": "افزودن رویداد",
+      "New Event": "رویداد جدید",
+      "Edit Event": "ویرایش رویداد",
+      "Close form": "بستن فرم",
+      "Set title, date and repeat pattern.": "عنوان، تاریخ و الگوی تکرار را مشخص کنید.",
+      "Event Title": "عنوان رویداد",
+      "e.g. Mom's Birthday": "مثلاً تولد مامان",
+      "Gregorian Date": "تاریخ میلادی",
+      "Jalali Date": "تاریخ شمسی",
+      "Repeat": "تکرار",
+      "One time": "یک‌بار",
+      "Daily": "هر روز",
+      "Weekly": "هر هفته",
+      "Monthly": "هر ماه",
+      "Yearly": "هر سال",
+      "Repeat Until": "تکرار تا",
+      "(optional)": "(اختیاری)",
+      "Category": "دسته",
+      "All-day event": "رویداد تمام‌روز",
+      "Event Time": "ساعت رویداد",
+      "Reminder Time": "ساعت یادآوری",
+      "Remind Me": "یادآوری",
+      "At time of event": "سر ساعت رویداد",
+      "15 minutes before": "۱۵ دقیقه قبل",
+      "30 minutes before": "۳۰ دقیقه قبل",
+      "1 hour before": "۱ ساعت قبل",
+      "2 hours before": "۲ ساعت قبل",
+      "1 day before": "۱ روز قبل",
+      "1 week before": "۱ هفته قبل",
+      "Pin this event to the top": "این رویداد بالای فهرست بماند",
+      "Note": "یادداشت",
+      "Add details, tasks, or a checklist…": "جزئیات، کارها یا فهرست وارسی…",
+      "Cancel": "انصراف",
+      "Save Event": "ذخیره رویداد",
+      "Save Changes": "ذخیره تغییرات",
+
+      // Detail sheet
+      "Event Details": "جزئیات رویداد",
+      "Full view and actions": "نمای کامل و عملیات",
+      "Close details": "بستن جزئیات",
+      "days": "روز",
+      "📅 Gregorian": "📅 میلادی",
+      "🗓️ Jalali": "🗓️ شمسی",
+      "🌍 Timezone": "🌍 منطقه زمانی",
+      "🔔 Status": "🔔 وضعیت",
+      "Edit": "ویرایش",
+      "Share": "اشتراک",
+      "📌 Pin": "📌 سنجاق",
+      "Delete": "حذف",
+      "Event Note": "یادداشت رویداد",
+      "Write a note, checklist, or details…": "یادداشت، فهرست وارسی یا جزئیات…",
+      "Reset": "بازنشانی",
+      "Save Note": "ذخیره یادداشت",
+      "Delete Event?": "رویداد حذف شود؟",
+      "This action cannot be undone.": "این کار قابل بازگشت نیست.",
+
+      // Onboarding
+      "Never miss what matters": "هیچ چیز مهمی را فراموش نکنید",
+      "Add birthdays, appointments, and anything else you want to remember — TimeManager Pro keeps track so you don't have to.": "تولدها، قرارها و هر چیز دیگری را که می‌خواهید به یاد بماند اضافه کنید — تایم‌منیجر پرو به جای شما یادش می‌ماند.",
+      "Reminders come straight to Telegram": "یادآوری‌ها مستقیم به تلگرام می‌رسند",
+      "No separate app to check. When it's time, you'll get a message right here — once, or on a repeating schedule you choose.": "لازم نیست برنامه دیگری را چک کنید. سر وقتش همین‌جا پیام می‌گیرید، یک‌بار یا با تکراری که خودتان انتخاب می‌کنید.",
+      "Gregorian & Jalali, together": "میلادی و شمسی، کنار هم",
+      "Every date shows in both calendars automatically. Tap the + button below to add your first event.": "هر تاریخ خودکار در هر دو تقویم نشان داده می‌شود. برای افزودن اولین رویداد دکمه + را بزنید.",
+      "Skip": "رد کردن",
+      "Next": "بعدی",
+      "Get Started": "شروع کنیم",
+
+      // Categories and statuses rendered from JS
+      "General": "عمومی",
+      "Birthday": "تولد",
+      "Work": "کاری",
+      "Family": "خانواده",
+      "Health": "سلامت",
+      "Travel": "سفر",
+      "Finance": "مالی",
+      "Study": "درسی",
+      "Other": "سایر",
+      "Pinned": "سنجاق‌شده",
+      "Pending": "در انتظار",
+      "Processing...": "در حال ارسال…",
+      "✅ Sent": "✅ ارسال شد",
+      "❌ Failed": "❌ ناموفق",
+
+      // Toasts and errors
+      "Please enter an event title.": "لطفاً عنوان رویداد را وارد کنید.",
+      "Please select a date.": "لطفاً تاریخ را انتخاب کنید.",
+      "Please set the event time, or mark it as an all-day event.": "ساعت رویداد را مشخص کنید یا آن را تمام‌روز علامت بزنید.",
+      "Event saved! You'll receive a reminder in Telegram.": "رویداد ذخیره شد! یادآوری‌اش در تلگرام می‌رسد.",
+      "Event updated successfully.": "رویداد به‌روزرسانی شد.",
+      "Event deleted.": "رویداد حذف شد.",
+      "Note saved.": "یادداشت ذخیره شد.",
+      "Event pinned to top.": "رویداد بالای فهرست سنجاق شد.",
+      "Event unpinned.": "سنجاق رویداد برداشته شد.",
+      "Shared!": "به اشتراک گذاشته شد!",
+      "Event details copied to clipboard.": "جزئیات رویداد کپی شد.",
+      "Could not share. Please try copying manually.": "اشتراک‌گذاری ممکن نشد. دستی کپی کنید.",
+      "The note is too long (max 2000 chars).": "یادداشت خیلی بلند است (حداکثر ۲۰۰۰ نویسه).",
+      "You have reached the maximum number of events (500).": "به حداکثر تعداد رویداد رسیده‌اید (۵۰۰).",
+      "Too many requests. Please slow down.": "درخواست‌ها زیاد است. کمی آهسته‌تر.",
+      "Event not found or access denied.": "رویداد پیدا نشد یا دسترسی ندارید.",
+      "The request failed. Please try again.": "درخواست ناموفق بود. دوباره تلاش کنید.",
+      "Telegram authentication data is incomplete.": "اطلاعات احراز هویت تلگرام ناقص است.",
+      "User information was not received from Telegram.": "اطلاعات کاربر از تلگرام دریافت نشد.",
+      "Authentication timestamp is invalid.": "زمان احراز هویت معتبر نیست.",
+      "Server configuration error. Please contact support.": "خطای پیکربندی سرور. با پشتیبانی تماس بگیرید.",
+      "Invalid event ID.": "شناسه رویداد نامعتبر است.",
+
+      // Countdown
+      "Today! 🎉": "امروز! 🎉",
+      "This event is today!": "این رویداد امروز است!",
+      "{days} ago": "{days} پیش",
+      "This event was {days} ago": "{days} پیش بوده است",
+      "{parts} remaining": "{parts} مانده",
+      "{parts} left": "{parts} مانده",
+      "day": "روز",
+      "week": "هفته",
+      "month": "ماه",
+      "year": "سال",
+      "yr": "سال",
+      "mo": "ماه",
+    },
+  };
+
+  let currentLang = "en";
+
+  function t(text, vars) {
+    const table = TRANSLATIONS[currentLang] || {};
+    let out = table[text] || text;
+    if (vars) {
+      Object.keys(vars).forEach((key) => {
+        out = out.split(`{${key}}`).join(vars[key]);
+      });
+    }
+    return out;
+  }
+
+  // Walks the static markup once and swaps any text node or attribute whose
+  // trimmed value has an entry. Unknown strings are left alone, so a missing
+  // translation degrades to English rather than to a blank.
+  function translateDocument(root) {
+    root = root || document.body;
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        const parent = node.parentElement;
+        if (!parent || parent.closest("script, style")) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+
+    nodes.forEach((node) => {
+      const trimmed = node.nodeValue.trim();
+      const translated = t(trimmed);
+      if (translated !== trimmed) node.nodeValue = node.nodeValue.replace(trimmed, translated);
+    });
+
+    ["placeholder", "aria-label", "title"].forEach((attr) => {
+      root.querySelectorAll(`[${attr}]`).forEach((el) => {
+        const value = (el.getAttribute(attr) || "").trim();
+        const translated = t(value);
+        if (translated !== value) el.setAttribute(attr, translated);
+      });
+    });
+  }
+
+  function applyLanguage() {
+    const code = String(tg?.initDataUnsafe?.user?.language_code || "").toLowerCase();
+    currentLang = code.startsWith("fa") ? "fa" : "en";
+
+    const root = document.documentElement;
+    root.lang = currentLang;
+    root.dir = currentLang === "fa" ? "rtl" : "ltr";
+
+    if (currentLang !== "en") translateDocument();
+  }
+
   const CATEGORY_PLAIN = {
     general: "General",  birthday: "Birthday",
     work:    "Work",      family:   "Family",
@@ -321,7 +558,7 @@
       INVALID_ID_FORMAT:      "Invalid event ID.",
     };
     const detail = error?.message || "";
-    return map[detail] || `Error: ${detail || "Unknown error"}`;
+    return t(map[detail]) || `Error: ${detail || "Unknown error"}`;
   }
 
   /* ── Load Events ─────────────────────────────────────── */
@@ -446,6 +683,8 @@
   }
 
   function pluralize(n, word) {
+    // Persian marks no plural on a counted noun: "3 days" is "۳ روز", not "روزها".
+    if (currentLang !== "en") return `${n} ${t(word)}`;
     return `${n} ${word}${n !== 1 ? "s" : ""}`;
   }
 
@@ -459,8 +698,8 @@
     if (diff.past) {
       return {
         tone: "past",
-        shortText: `${pluralize(diff.totalDays, "day")} ago`,
-        fullText: `This event was ${pluralize(diff.totalDays, "day")} ago`,
+        shortText: t("{days} ago", { days: pluralize(diff.totalDays, "day") }),
+        fullText: t("This event was {days} ago", { days: pluralize(diff.totalDays, "day") }),
         totalDays: -diff.totalDays,
       };
     }
@@ -468,8 +707,8 @@
     if (diff.totalDays === 0) {
       return {
         tone: "today",
-        shortText: "Today! 🎉",
-        fullText: "This event is today!",
+        shortText: t("Today! 🎉"),
+        fullText: t("This event is today!"),
         totalDays: 0,
       };
     }
@@ -487,8 +726,8 @@
     const extraDays = diff.weeks * 7 + diff.days;
     if (extraDays)   shortParts.push(pluralize(extraDays, "day"));
 
-    const fullText  = `${parts.join(", ")} remaining`;
-    const shortText = `${shortParts.join(" ")} left`;
+    const fullText  = t("{parts} remaining", { parts: parts.join("، ") });
+    const shortText = t("{parts} left",       { parts: shortParts.join(" ") });
 
     let tone = "long";
     if      (diff.totalDays <= 3)   tone = "critical";
@@ -567,7 +806,7 @@
 
         <div class="event-bottom">
           <span class="status-dot status-${escapeHtml(event.notify_status || "pending")}"></span>
-          <span>${escapeHtml(STATUS_LABELS[event.notify_status] || "Pending")}</span>
+          <span>${escapeHtml(t(STATUS_LABELS[event.notify_status] || "Pending"))}</span>
         </div>
       `;
 
@@ -671,7 +910,7 @@
     if (els.dateJalali)     els.dateJalali.value     = "";
     if (els.noteCharCount)  els.noteCharCount.textContent = "0 / 2000";
     state.editingEventId = null;
-    if (els.composerTitle)    els.composerTitle.textContent    = "New Event";
+    if (els.composerTitle)    els.composerTitle.textContent    = t("New Event");
     if (els.composerSubtitle) els.composerSubtitle.textContent = "Set title, date and repeat pattern.";
     updateRepeatUntilVisibility();
     updateAllDayVisibility();
@@ -717,7 +956,7 @@
     if (els.noteCharCount) {
       els.noteCharCount.textContent = `${(event.note || "").length} / 2000`;
     }
-    if (els.composerTitle)    els.composerTitle.textContent    = "Edit Event";
+    if (els.composerTitle)    els.composerTitle.textContent    = t("Edit Event");
     if (els.composerSubtitle) els.composerSubtitle.textContent = "Update the event details.";
     if (els.saveEventBtn)     els.saveEventBtn.textContent     = "Save Changes";
     openSheet("composerSheet", els.title);
@@ -750,7 +989,7 @@
     }
     if (els.detailDateJalali)   els.detailDateJalali.textContent    = ev.date_jalali || "—";
     if (els.detailTimezone)     els.detailTimezone.textContent      = ev.tz_name     || "UTC";
-    if (els.detailStatus)       els.detailStatus.textContent        = STATUS_LABELS[ev.notify_status] || "—";
+    if (els.detailStatus)       els.detailStatus.textContent        = t(STATUS_LABELS[ev.notify_status] || "—");
     if (els.detailNote)         els.detailNote.value                = ev.note        || "";
 
     // Pin button label
@@ -791,6 +1030,9 @@
       title:    els.title?.value.trim()    || "",
       date:     els.date?.value            || "",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      // Travels with the event so the worker, which has no initData when it
+      // fires a reminder, knows which language to write it in.
+      lang: currentLang,
       repeat:   els.repeat?.value          || "none",
       category: els.category?.value        || "general",
       note:     els.note?.value.trim()     || "",
@@ -805,17 +1047,17 @@
     };
 
     if (!payload.title) {
-      showToast("Please enter an event title.", "error");
+      showToast(t("Please enter an event title."), "error");
       els.title?.focus();
       return;
     }
     if (!payload.date) {
-      showToast("Please select a date.", "error");
+      showToast(t("Please select a date."), "error");
       els.date?.focus();
       return;
     }
     if (!allDay && !eventTime) {
-      showToast("Please set the event time, or mark it as an all-day event.", "error");
+      showToast(t("Please set the event time, or mark it as an all-day event."), "error");
       els.eventTime?.focus();
       return;
     }
@@ -825,10 +1067,10 @@
       if (state.editingEventId) {
         // ✅ FIX: event_id (was: eventid)
         await apiPost("/api/edit", { event_id: state.editingEventId, ...payload });
-        showToast("Event updated successfully.", "success");
+        showToast(t("Event updated successfully."), "success");
       } else {
         await apiPost("/api/add", payload);
-        showToast("Event saved! You'll receive a reminder in Telegram.", "success");
+        showToast(t("Event saved! You'll receive a reminder in Telegram."), "success");
       }
       closeSheets();
       resetComposer();
@@ -859,7 +1101,7 @@
       // ✅ FIX: event_id (was: eventid)
       await apiPost("/api/delete", { event_id: ev.id });
       closeSheets();
-      showToast("Event deleted.", "success");
+      showToast(t("Event deleted."), "success");
       await loadEvents();
     } catch (error) {
       showToast(normalizeError(error), "error");
@@ -882,7 +1124,7 @@
       });
       const target = getEventById(ev.id);
       if (target) target.note = data.note || "";
-      showToast("Note saved.", "success");
+      showToast(t("Note saved."), "success");
     } catch (error) {
       showToast(normalizeError(error), "error");
     } finally {
@@ -929,20 +1171,20 @@
       ev.all_day === false && ev.time_hm ? `🕒 Time: ${ev.time_hm}` : "",
       `🗓️ Jalali: ${ev.date_jalali}`,
       `🔄 Repeat: ${REPEAT_LABELS[ev.repeat] || "One time"}`,
-      `🏷️ Category: ${CATEGORY_PLAIN[ev.category] || "General"}`,
+      `🏷️ Category: ${t(CATEGORY_PLAIN[ev.category] || "General")}`,
       ev.note ? `📝 Note: ${ev.note}` : "",
     ].filter(Boolean).join("\n");
 
     try {
       if (navigator.share) {
         await navigator.share({ title: ev.title, text });
-        showToast("Shared!", "success");
+        showToast(t("Shared!"), "success");
         return;
       }
       await copyToClipboard(text);
-      showToast("Event details copied to clipboard.", "success");
+      showToast(t("Event details copied to clipboard."), "success");
     } catch (_) {
-      showToast("Could not share. Please try copying manually.", "error");
+      showToast(t("Could not share. Please try copying manually."), "error");
     }
   }
 
@@ -1137,11 +1379,11 @@
   function renderOnboardingStep() {
     const step = ONBOARDING_STEPS[onboardingStep];
     if (els.onboardingIcon)  els.onboardingIcon.textContent  = step.icon;
-    if (els.onboardingTitle) els.onboardingTitle.textContent = step.title;
-    if (els.onboardingText)  els.onboardingText.textContent  = step.text;
+    if (els.onboardingTitle) els.onboardingTitle.textContent = t(step.title);
+    if (els.onboardingText)  els.onboardingText.textContent  = t(step.text);
     if (els.onboardingNextBtn) {
       els.onboardingNextBtn.textContent =
-        onboardingStep === ONBOARDING_STEPS.length - 1 ? "Get Started" : "Next";
+        onboardingStep === ONBOARDING_STEPS.length - 1 ? t("Get Started") : t("Next");
     }
     if (els.onboardingDots) {
       [...els.onboardingDots.children].forEach((dot, i) => {
@@ -1169,6 +1411,9 @@
   }
 
   /* ── Boot ────────────────────────────────────────────── */
+  // Before anything renders: the DOM pass rewrites the static markup, and
+  // every later render reads currentLang through t().
+  applyLanguage();
   initTelegram();
   bindEvents();
   loadEvents();

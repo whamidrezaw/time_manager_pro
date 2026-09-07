@@ -662,7 +662,7 @@ a { color: var(--link); }
   color: var(--text-2);
 }
 
-.field-optional { font-weight: 400; color: var(--text-muted); margin-left: 2px; }
+.field-optional { font-weight: 400; color: var(--text-muted); margin-inline-start: 2px; }
 
 .field-input {
   width: 100%; min-height: 50px;
@@ -680,7 +680,7 @@ a { color: var(--link); }
   box-shadow: 0 0 0 4px rgba(91,108,248,0.12);
 }
 
-.field-select { cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238890b8' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+.field-select { cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238890b8' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-inline-end: 36px; }
 
 .field-textarea {
   min-height: 120px;
@@ -917,4 +917,21 @@ a { color: var(--link); }
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+/* ── Right-to-left ──────────────────────────────────────
+   The layout is flexbox and grid throughout, so dir="rtl" on <html> mirrors
+   almost everything on its own. These are the few places that needed a hand:
+   the select chevron is a background image, which has no logical equivalent,
+   and a handful of glyphs read better mirrored. */
+[dir="rtl"] .field-select {
+  background-position: left 14px center;
+  padding-inline-end: 14px;
+  padding-inline-start: 36px;
+}
+
+[dir="rtl"] .back-btn svg,
+[dir="rtl"] .chevron,
+[dir="rtl"] .arrow-icon {
+  transform: scaleX(-1);
 }

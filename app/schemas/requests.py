@@ -59,6 +59,10 @@ class EventBaseRequest(InitDataPayload):
     category: CategoryType = "general"
     note: str = Field(default="", max_length=2000)
     pinned: bool = False
+    # Sent by the client, exactly like `timezone` above. The worker has no
+    # initData when it fires a reminder, so the language has to live on the
+    # document by the time it is needed.
+    lang: Literal["en", "fa"] = "en"
     all_day: bool = True
     time_hm: str | None = Field(default=None, max_length=5)
     reminders: list[ReminderSpec] = Field(

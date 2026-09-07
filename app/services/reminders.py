@@ -13,10 +13,10 @@ from app.utils.dates import (
     expire_for_repeat,
     next_schedule,
     normalize_reminders,
-    repeat_label,
     safe_zoneinfo,
     to_jalali,
 )
+from app.utils.i18n import DEFAULT_LANGUAGE, category_label, repeat_label, t
 from app.utils.ids import object_id_str, safe_object_id
 
 logger = logging.getLogger("tm_pro.reminders")
@@ -52,11 +52,15 @@ def event_reminder_specs(evt: dict) -> list[dict]:
     )
 
 
+def event_language(evt: dict) -> str:
+    return evt.get("lang") or DEFAULT_LANGUAGE
+
+
 def build_reminder_text(evt: dict) -> str:
+    lang = event_language(evt)
     repeat = evt.get("repeat", "none")
-    repeat_text = repeat_label(repeat)
     date_iso = evt.get("date_iso", "")
-    jalali_date = to_jalali(date_iso)
+    jalali_date = evt.get("date_jalali") or to_jalali(date_iso)
     category = evt.get("category", "general")
     pin_mark = "📌 " if evt.get("pinned") else ""
     title = html.escape(evt.get("title", ""))
@@ -66,12 +70,12 @@ def build_reminder_text(evt: dict) -> str:
         time_line = f"🕒 {html.escape(str(evt['time_hm']))}\n"
 
     return (
-        f"🔔 <b>Reminder</b>\n"
+        f"{t('reminder_title', lang)}\n"
         f"{pin_mark}{title}\n"
         f"📅 {date_iso}  •  {jalali_date}\n"
         f"{time_line}"
-        f"🏷️ {html.escape(category.title())}\n"
-        f"🔄 {repeat_text}"
+        f"🏷️ {html.escape(category_label(category, lang))}\n"
+        f"🔄 {repeat_label(repeat, lang)}"
     )
 
 
@@ -82,11 +86,16 @@ def build_reminder_keyboard(evt: dict, settings: Settings) -> InlineKeyboardMark
         f"{settings.telegram_mini_app_short_name}?startapp={event_id}"
     )
 
+    lang = event_language(evt)
+
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("⏰ Snooze 1h", callback_data=f"snooze1h:{event_id}"),
-                InlineKeyboardButton("📖 Open", url=deep_link),
+                InlineKeyboardButton(
+                    t("snooze_button", lang),
+                    callback_data=f"snooze1h:{event_id}",
+                ),
+                InlineKeyboardButton(t("open_button", lang), url=deep_link),
             ]
         ]
     )
