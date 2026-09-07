@@ -1,3 +1,48 @@
+/* ── Typeface ───────────────────────────────────────────
+   Vazirmatn covers Latin, Persian, and both sets of digits in one family.
+   That matters here because the interface mixes them constantly — "1405/01/31"
+   and "14:30" sit inside Persian sentences. With two families the digits and
+   the words come from different designs with different baselines, which is
+   exactly the mismatch this avoids. It also halves the download and removes
+   the Google Fonts round trip. */
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/static/fonts/Vazirmatn-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/static/fonts/Vazirmatn-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/static/fonts/Vazirmatn-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/static/fonts/Vazirmatn-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+/* 800 is used in a few headings; Bold covers it rather than shipping a
+   fifth file for two rules. */
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('/static/fonts/Vazirmatn-ExtraBold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ═══════════════════════════════════════════════════════════
    TimeManager Pro — style.css v2.0
    Vibrant, mobile-first, Telegram Mini App
@@ -77,7 +122,7 @@
   /* Layout */
   --safe-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
   --app-max: 860px;
-  --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font: 'Vazirmatn', system-ui, -apple-system, sans-serif;
 }
 
 /* ── Dark mode ──────────────────────────────────────────

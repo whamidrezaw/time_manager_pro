@@ -132,6 +132,25 @@ async def backfill_jalali_dates(batch_size: int = 500, max_batches: int = 200) -
     return updated
 
 
+async def stop_expiring_one_off_events() -> int:
+    """Remove the TTL marker from one-off events written before they were kept.
+
+    Those documents already carry an expire_at, so without this the archive
+    would quietly lose every event whose reminder fired more than 30 days ago.
+    A single update_many, and a no-op once it has run.
+    """
+    events = get_events_collection()
+    result = await events.update_many(
+        {"repeat": "none", "expire_at": {"$exists": True}},
+        {"$unset": {"expire_at": ""}},
+    )
+
+    if result.modified_count:
+        logger.info("Kept %s one-off events that were set to expire", result.modified_count)
+
+    return result.modified_count
+
+
 async def ping_database() -> bool:
     db = get_database()
     await db.command("ping")

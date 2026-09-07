@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -322,3 +322,59 @@ def test_add_request_accepts_the_exact_payload_the_mini_app_sends() -> None:
     timed_doc = _normalize_event_input(AddEventRequest(**timed_payload))
     assert timed_doc["time_hm"] == "14:30"
     assert timed_doc["event_ts_utc"] - timed_doc["next_notify_at"] == timedelta(minutes=60)
+
+
+def test_next_occurrence_is_the_series_start_for_a_one_off_event() -> None:
+    from app.services.events import next_occurrence_iso
+
+    doc = {
+        "date_iso": "2026-04-20",
+        "tz_name": "Europe/Berlin",
+        "event_ts_utc": datetime(2026, 4, 19, 22, 0, tzinfo=timezone.utc),
+    }
+    assert next_occurrence_iso(doc) == "2026-04-20"
+
+
+def test_next_occurrence_follows_the_advanced_timestamp() -> None:
+    """A yearly birthday from 2020 counts down to the next one, not to 2020 —
+    the worker moves event_ts_utc forward while date_iso stays put."""
+    from app.services.events import next_occurrence_iso, serialize_event
+
+    doc = {
+        "_id": "x",
+        "title": "Mom birthday",
+        "date_iso": "2020-04-20",
+        "date_jalali": "1399/02/01",
+        "repeat": "yearly",
+        "notify_status": "pending",
+        "tz_name": "Europe/Berlin",
+        "category": "birthday",
+        "pinned": False,
+        "note": "",
+        "event_ts_utc": datetime(2027, 4, 19, 22, 0, tzinfo=timezone.utc),
+    }
+
+    assert next_occurrence_iso(doc) == "2027-04-20"
+
+    out = serialize_event(doc)
+    assert out.date_iso == "2020-04-20"
+    assert out.next_date_iso == "2027-04-20"
+    assert out.next_date_jalali != out.date_jalali
+
+
+def test_next_occurrence_falls_back_when_the_timestamp_is_missing() -> None:
+    from app.services.events import next_occurrence_iso
+
+    assert next_occurrence_iso({"date_iso": "2026-04-20"}) == "2026-04-20"
+
+
+def test_one_off_events_are_not_given_a_ttl() -> None:
+    """expire_at is what the TTL index deletes on. A one-off event keeps no
+    expiry, so the archive survives; a series still gets its safety net."""
+    from app.services.events import _normalize_event_input
+
+    once = _normalize_event_input(_event_payload(repeat="none"))
+    series = _normalize_event_input(_event_payload(repeat="yearly"))
+
+    assert "expire_at" not in once
+    assert "expire_at" in series

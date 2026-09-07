@@ -29,6 +29,7 @@ CategoryType = Literal[
 ListFilterType = Literal[
     "all",
     "pinned",
+    "past",
     "general",
     "birthday",
     "work",

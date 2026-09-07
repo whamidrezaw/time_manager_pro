@@ -18,6 +18,12 @@ class EventOut(APIModel):
     category: str = "general"
     pinned: bool = False
     note: str = ""
+    # date_iso is where the series started — for a birthday, the birth date.
+    # next_date_iso is the occurrence being counted down to. They differ only
+    # for recurring events, and conflating them is what made a yearly birthday
+    # sort correctly while displaying "6 years ago".
+    next_date_iso: str = ""
+    next_date_jalali: str = ""
     all_day: bool = True
     time_hm: str | None = None
     reminders: list[ReminderSpec] = Field(default_factory=list)

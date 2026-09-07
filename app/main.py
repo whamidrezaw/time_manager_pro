@@ -14,6 +14,7 @@ from app.db import (
     close_mongo_connection,
     connect_to_mongo,
     ensure_indexes,
+    stop_expiring_one_off_events,
 )
 from app.routes.events import router as events_router
 from app.routes.health import router as health_router
@@ -61,8 +62,9 @@ async def lifespan(app: FastAPI):
     # here must not stop the app from serving.
     try:
         await backfill_jalali_dates()
+        await stop_expiring_one_off_events()
     except Exception:
-        logger.exception("date_jalali backfill failed; search on Jalali dates may be incomplete")
+        logger.exception("Startup migration failed; search or archiving may be incomplete")
 
     yield
 

@@ -42,9 +42,26 @@ VALID_CATEGORIES = {
 }
 
 
+def next_occurrence_iso(doc: dict) -> str:
+    """The date of the occurrence this event is currently counting down to.
+
+    The worker moves event_ts_utc forward after each send; date_iso stays on
+    the day the series began.
+    """
+    event_ts = doc.get("event_ts_utc")
+    if event_ts is None:
+        return doc.get("date_iso", "")
+
+    tz, _ = safe_zoneinfo(doc.get("tz_name"))
+    if event_ts.tzinfo is None:
+        event_ts = event_ts.replace(tzinfo=timezone.utc)
+    return event_ts.astimezone(tz).date().isoformat()
+
+
 def serialize_event(doc: dict) -> EventOut:
     date_iso = doc.get("date_iso", "")
     all_day = bool(doc.get("all_day", True))
+    next_iso = next_occurrence_iso(doc)
     return EventOut(
         id=str(doc["_id"]),
         title=doc.get("title", ""),
@@ -56,6 +73,9 @@ def serialize_event(doc: dict) -> EventOut:
         category=doc.get("category", "general"),
         pinned=bool(doc.get("pinned", False)),
         note=doc.get("note", ""),
+        next_date_iso=next_iso,
+        next_date_jalali=to_jalali(next_iso) if next_iso != date_iso
+                         else (doc.get("date_jalali") or to_jalali(date_iso)),
         all_day=all_day,
         time_hm=doc.get("time_hm"),
         # Documents written before this field existed have no "reminders" key;
@@ -149,7 +169,11 @@ def _normalize_event_input(
         "reminders":            reminders,
         "next_notify_at":       notify_utc,
         "event_ts_utc":         event_utc,
-        "expire_at":            expire_for_repeat(notify_utc or event_utc, repeat),
+        # Only recurring series get a TTL, as a safety net against an abandoned
+        # series growing for ever. A one-off event is kept: its reminder having
+        # fired is not a reason to erase the user's record of it.
+        **({"expire_at": expire_for_repeat(notify_utc or event_utc, repeat)}
+           if repeat != "none" else {}),
         "repeat":               repeat,
         "tz_name":              tz_name,
         # Kept in sync for clients that still read the flat pair.
@@ -173,10 +197,20 @@ def build_list_query(user_id: str, payload: ListEventsRequest) -> dict:
     """
     query: dict = {"user_id": user_id}
 
-    if payload.filter == "pinned":
-        query["pinned"] = True
-    elif payload.filter != "all":
-        query["category"] = payload.filter
+    # A one-off event whose reminder has already been sent is archived: kept
+    # for ever, but out of the way. Pinned ones stay in the main list, since
+    # pinning is exactly the request to keep something in view.
+    archived = {"repeat": "none", "notify_status": "done", "pinned": {"$ne": True}}
+
+    if payload.filter == "past":
+        query.update({"repeat": "none", "notify_status": "done"})
+    else:
+        query["$nor"] = [archived]
+
+        if payload.filter == "pinned":
+            query["pinned"] = True
+        elif payload.filter != "all":
+            query["category"] = payload.filter
 
     clauses: list[dict] = []
     for term in search_variants(payload.q):

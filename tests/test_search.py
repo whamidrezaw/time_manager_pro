@@ -39,9 +39,30 @@ def test_regex_clause_can_be_case_sensitive() -> None:
 
 # ── Query building ──────────────────────────────────────────────────────────
 
+ARCHIVED = {"repeat": "none", "notify_status": "done", "pinned": {"$ne": True}}
+
+
 def test_plain_list_query_is_scoped_to_the_user() -> None:
     query = build_list_query("42", _request())
-    assert query == {"user_id": "42"}
+    assert query["user_id"] == "42"
+    assert "$or" not in query
+
+
+def test_default_list_hides_archived_events() -> None:
+    """A one-off event whose reminder has fired is kept, but out of the way."""
+    assert build_list_query("42", _request())["$nor"] == [ARCHIVED]
+
+
+def test_pinned_archived_events_stay_in_the_main_list() -> None:
+    """Pinning is the request to keep something in view, archived or not."""
+    assert ARCHIVED["pinned"] == {"$ne": True}
+
+
+def test_past_filter_shows_only_archived_events() -> None:
+    query = build_list_query("42", _request(filter="past"))
+    assert query["repeat"] == "none"
+    assert query["notify_status"] == "done"
+    assert "$nor" not in query
 
 
 def test_pinned_filter() -> None:
@@ -83,6 +104,8 @@ def test_search_and_filter_combine() -> None:
     query = build_list_query("42", _request(q="mom", filter="pinned"))
     assert query["pinned"] is True
     assert query["$or"]
+    # $or and $nor are separate top-level keys, so they AND together.
+    assert query["$nor"] == [ARCHIVED]
 
 
 def test_list_request_rejects_an_unknown_filter() -> None:

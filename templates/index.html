@@ -7,9 +7,10 @@
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="TimeManager Pro — Smart event reminders with Gregorian and Jalali dates for Telegram.">
   <title>TimeManager Pro</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Self-hosted: Google Fonts is slow or unreachable for a large part of this
+       app's audience, and Plus Jakarta Sans carries no Persian glyphs at all,
+       so every Persian word fell back to whatever the device happened to have. -->
+  <link rel="preload" href="/static/fonts/Vazirmatn-Regular.woff2?v={{ asset_version }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/style.css?v={{ asset_version }}">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -84,6 +85,7 @@
         <button type="button" class="seg-btn" data-filter="travel">✈️ Travel</button>
         <button type="button" class="seg-btn" data-filter="finance">💰 Finance</button>
         <button type="button" class="seg-btn" data-filter="study">📚 Study</button>
+        <button type="button" class="seg-btn" data-filter="past">🗄️ Past</button>
       </div>
       <label class="search-wrap" for="searchInput">
         <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
