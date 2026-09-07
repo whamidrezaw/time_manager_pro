@@ -975,8 +975,95 @@ a { color: var(--link); }
   padding-inline-start: 36px;
 }
 
+/* The wheels are a grid, so RTL would otherwise reverse them to Day | Month |
+   Year. Year-first reads correctly in both directions here, because each
+   column is a number list rather than a sentence. */
+[dir="rtl"] .dp-wheels { direction: ltr; }
+[dir="rtl"] .dp-item { direction: rtl; }
+
 [dir="rtl"] .back-btn svg,
 [dir="rtl"] .chevron,
 [dir="rtl"] .arrow-icon {
   transform: scaleX(-1);
 }
+
+/* ── Date picker ────────────────────────────────────────
+   Three scroll-snapping columns rather than a typed field. The snap does the
+   selection: whichever item ends up under the highlight band is the value, so
+   there is no drag maths to get wrong and momentum scrolling comes free from
+   the browser. Sits at z-index 50, above the sheet (41) and below the confirm
+   dialog (60). */
+.field-picker { cursor: pointer; caret-color: transparent; }
+
+.dp-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(10, 12, 30, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.dp-dialog {
+  width: min(100%, 480px);
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  padding: 8px 18px 18px;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.25);
+  animation: dp-rise 0.22s ease-out;
+}
+
+@keyframes dp-rise { from { transform: translateY(16px); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-dialog { animation: none; }
+}
+
+.dp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+
+.dp-tabs { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 3px; gap: 3px; }
+.dp-tab {
+  border: 0; background: transparent; color: var(--text-2);
+  font: inherit; font-size: 0.82rem; font-weight: 600;
+  padding: 6px 12px; border-radius: 8px; cursor: pointer;
+}
+.dp-tab.is-active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); }
+
+.dp-wheels {
+  position: relative;
+  display: grid; grid-template-columns: 1.1fr 1.4fr 0.9fr; gap: 6px;
+  height: 200px;
+}
+
+.dp-wheel {
+  height: 200px; overflow-y: auto; overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  padding-block: 80px;                 /* (200 - 40) / 2, so item 0 can centre */
+  scrollbar-width: none;
+  text-align: center;
+}
+.dp-wheel::-webkit-scrollbar { display: none; }
+.dp-wheel:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 10px; }
+
+.dp-item {
+  height: 40px; line-height: 40px;
+  scroll-snap-align: center;
+  font-size: 0.95rem; color: var(--text-muted);
+  cursor: pointer; user-select: none;
+  transition: color 0.15s ease, font-weight 0.15s ease;
+}
+.dp-item[aria-selected="true"] { color: var(--text); font-weight: 700; }
+
+.dp-highlight {
+  position: absolute; inset-inline: 0; top: 80px; height: 40px;
+  border-radius: 10px; background: var(--brand-soft);
+  pointer-events: none;
+}
+
+.dp-preview {
+  margin: 14px 0 0; text-align: center;
+  font-size: 0.9rem; font-weight: 600; color: var(--text-2);
+  min-height: 1.2em;
+}
+
+.dp-actions { display: flex; gap: 8px; margin-top: 16px; }
+.dp-actions .btn-secondary { flex: 1; }
+.dp-actions .btn-primary { flex: 1.4; }

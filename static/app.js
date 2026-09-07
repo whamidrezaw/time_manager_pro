@@ -118,6 +118,16 @@
     reminderTime:       $("reminderTime"),
     reminderOffsetWrap: $("reminderOffsetWrap"),
     reminderOffset:     $("reminderOffset"),
+    dpOverlay:          $("dpOverlay"),
+    dpTabs:             Array.from(document.querySelectorAll(".dp-tab")),
+    dpYear:             $("dpYear"),
+    dpMonth:            $("dpMonth"),
+    dpDay:              $("dpDay"),
+    dpPreview:          $("dpPreview"),
+    dpToday:            $("dpToday"),
+    dpClear:            $("dpClear"),
+    dpCancel:           $("dpCancel"),
+    dpConfirm:          $("dpConfirm"),
 
     // Detail
     detailSheet:        $("detailSheet"),
@@ -198,6 +208,26 @@
       "💰 Finance": "💰 مالی",
       "📚 Study": "📚 درسی",
       "🗄️ Past": "🗄️ گذشته",
+
+      // Date picker
+      "Pick a date": "انتخاب تاریخ",
+      "Calendar": "تقویم",
+      "Gregorian": "میلادی",
+      "Jalali": "شمسی",
+      "Year": "سال",
+      "Month": "ماه",
+      "Day": "روز",
+      "Today": "امروز",
+      "Clear": "پاک کردن",
+      "Confirm": "تأیید",
+      "January": "ژانویه", "February": "فوریه", "March": "مارس",
+      "April": "آوریل", "May": "مه", "June": "ژوئن",
+      "July": "ژوئیه", "August": "اوت", "September": "سپتامبر",
+      "October": "اکتبر", "November": "نوامبر", "December": "دسامبر",
+      "Farvardin": "فروردین", "Ordibehesht": "اردیبهشت", "Khordad": "خرداد",
+      "Tir": "تیر", "Mordad": "مرداد", "Shahrivar": "شهریور",
+      "Mehr": "مهر", "Aban": "آبان", "Azar": "آذر",
+      "Dey": "دی", "Bahman": "بهمن", "Esfand": "اسفند",
       "🌐 General": "🌐 عمومی",
       "📌 Other": "📌 سایر",
 
@@ -879,7 +909,10 @@
     } catch (_) {}
   }
 
-  function handleTgBack() { if (state.activeSheet) closeSheets(); }
+  function handleTgBack() {
+    if (closeDatePicker()) return;
+    if (state.activeSheet) closeSheets();
+  }
 
   /* ── Composer ────────────────────────────────────────── */
   // Kept in sync with the <option> values in index.html. Anything outside this
@@ -1402,6 +1435,7 @@
     // Keyboard
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
+        if (closeDatePicker()) return;
         if (els.confirmOverlay && !els.confirmOverlay.hidden) {
           els.confirmOverlay.hidden = true;
           return;
@@ -1479,12 +1513,264 @@
     try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch (_) {}
   }
 
+
+  /* ── Date Picker ─────────────────────────────────────── */
+  // A typed field cannot be got right in two calendars at once, so both dates
+  // are picked instead. Selection rides on CSS scroll snapping: whichever item
+  // settles under the highlight band is the value. No drag maths, and momentum
+  // scrolling comes free from the browser.
+  const DP_ITEM_H = 40;
+  const DP_SETTLE_MS = 90;
+
+  const MONTH_NAMES = {
+    gregorian: ["January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"],
+    jalali: ["Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad", "Shahrivar",
+             "Mehr", "Aban", "Azar", "Dey", "Bahman", "Esfand"],
+  };
+
+  // The server rejects anything outside 1900–2200, so the Jalali range is
+  // derived from that rather than guessed — every pickable Jalali date is
+  // guaranteed to convert back inside the accepted window.
+  const DP_YEAR_MIN = { gregorian: 1900 };
+  const DP_YEAR_MAX = { gregorian: 2200 };
+  DP_YEAR_MIN.jalali = gregorianToJalali(1900, 1, 1).jy + 1;
+  DP_YEAR_MAX.jalali = gregorianToJalali(2200, 12, 31).jy - 1;
+
+  const dp = {
+    calendar: "gregorian",
+    y: 0, m: 1, d: 1,
+    onPick: null,
+    allowClear: false,
+    settleTimer: null,
+  };
+
+  function daysInGregorianMonth(gy, gm) {
+    return new Date(Date.UTC(gy, gm, 0)).getUTCDate();
+  }
+
+  function dpDaysInMonth() {
+    return dp.calendar === "jalali"
+      ? daysInJalaliMonth(dp.y, dp.m)
+      : daysInGregorianMonth(dp.y, dp.m);
+  }
+
+  function dpToIso() {
+    if (dp.calendar === "jalali") {
+      const g = jalaliToGregorian(dp.y, dp.m, dp.d);
+      return `${g.gy}-${format2(g.gm)}-${format2(g.gd)}`;
+    }
+    return `${dp.y}-${format2(dp.m)}-${format2(dp.d)}`;
+  }
+
+  function dpSetFromIso(iso) {
+    const [gy, gm, gd] = String(iso || "").split("-").map(Number);
+    const valid = gy && gm && gd && gy >= 1900 && gy <= 2200;
+    const base = valid ? { gy, gm, gd } : (() => {
+      const now = new Date();
+      return { gy: now.getFullYear(), gm: now.getMonth() + 1, gd: now.getDate() };
+    })();
+
+    if (dp.calendar === "jalali") {
+      const j = gregorianToJalali(base.gy, base.gm, base.gd);
+      dp.y = j.jy; dp.m = j.jm; dp.d = j.jd;
+    } else {
+      dp.y = base.gy; dp.m = base.gm; dp.d = base.gd;
+    }
+  }
+
+  function dpRange(from, to) {
+    const out = [];
+    for (let i = from; i <= to; i += 1) out.push(i);
+    return out;
+  }
+
+  function dpFillWheel(el, values, labels, selected) {
+    if (!el) return;
+    el.innerHTML = values
+      .map((value, i) => `<div class="dp-item" role="option" data-value="${value}"` +
+                         ` aria-selected="${value === selected}">${escapeHtml(labels[i])}</div>`)
+      .join("");
+    const index = Math.max(0, values.indexOf(selected));
+    el.scrollTop = index * DP_ITEM_H;
+  }
+
+  function dpRender(scope = "all") {
+    const yMin = DP_YEAR_MIN[dp.calendar];
+    const yMax = DP_YEAR_MAX[dp.calendar];
+    dp.y = Math.min(Math.max(dp.y, yMin), yMax);
+    dp.m = Math.min(Math.max(dp.m, 1), 12);
+    dp.d = Math.min(Math.max(dp.d, 1), dpDaysInMonth());
+
+    // Rebuilding a wheel resets its scrollTop, so the two the user is not
+    // touching are left alone while a scroll is settling.
+    if (scope === "all") {
+      const years = dpRange(yMin, yMax);
+      dpFillWheel(els.dpYear, years, years.map(String), dp.y);
+
+      const months = dpRange(1, 12);
+      dpFillWheel(els.dpMonth, months,
+                  MONTH_NAMES[dp.calendar].map((name) => t(name)), dp.m);
+    }
+    // The day column is always rebuilt: its length depends on the month and,
+    // in Esfand, on whether the year is a leap year.
+    const days = dpRange(1, dpDaysInMonth());
+    dpFillWheel(els.dpDay, days, days.map(String), dp.d);
+
+    dpRenderPreview();
+  }
+
+  function dpRenderPreview() {
+    if (!els.dpPreview) return;
+    const iso = dpToIso();
+    const [gy, gm, gd] = iso.split("-").map(Number);
+    const j = gregorianToJalali(gy, gm, gd);
+    els.dpPreview.textContent = `${iso}  •  ${j.jy}/${format2(j.jm)}/${format2(j.jd)}`;
+  }
+
+  function dpMarkSelected(el, value) {
+    el?.querySelectorAll(".dp-item").forEach((item) => {
+      item.setAttribute("aria-selected", String(Number(item.dataset.value) === value));
+    });
+  }
+
+  function dpOnScroll(el, field) {
+    clearTimeout(dp.settleTimer);
+    dp.settleTimer = setTimeout(() => {
+      const index = Math.round(el.scrollTop / DP_ITEM_H);
+      const item = el.querySelectorAll(".dp-item")[index];
+      if (!item) return;
+
+      const value = Number(item.dataset.value);
+      if (value === dp[field]) return;
+
+      dp[field] = value;
+      dpMarkSelected(el, value);
+
+      // Month length changes with the month and with the Jalali leap year, so
+      // the day column is rebuilt whenever either of the others moves.
+      if (field === "d") dpRenderPreview();
+      else dpRender("days");
+    }, DP_SETTLE_MS);
+  }
+
+  function openDatePicker({ value, onPick, allowClear = false, calendar = "gregorian" }) {
+    dp.onPick = onPick;
+    dp.allowClear = allowClear;
+    dp.calendar = calendar;
+    dpSetFromIso(value);
+
+    els.dpTabs.forEach((tab) => {
+      const active = tab.dataset.calendar === dp.calendar;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+    });
+    if (els.dpClear) els.dpClear.hidden = !allowClear;
+
+    dpRender();
+    state.lastFocusedElement = document.activeElement;
+    if (els.dpOverlay) {
+      els.dpOverlay.hidden = false;
+      els.dpOverlay.setAttribute("aria-hidden", "false");
+    }
+    setTimeout(() => els.dpConfirm?.focus?.(), 40);
+  }
+
+  function closeDatePicker() {
+    if (!els.dpOverlay || els.dpOverlay.hidden) return false;
+    els.dpOverlay.hidden = true;
+    els.dpOverlay.setAttribute("aria-hidden", "true");
+    dp.onPick = null;
+    state.lastFocusedElement?.focus?.();
+    return true;
+  }
+
+  function setEventDate(iso) {
+    if (els.date) els.date.value = iso;
+    if (els.dateJalali) {
+      if (!iso) { els.dateJalali.value = ""; return; }
+      const [gy, gm, gd] = iso.split("-").map(Number);
+      const j = gregorianToJalali(gy, gm, gd);
+      els.dateJalali.value = `${j.jy}/${format2(j.jm)}/${format2(j.jd)}`;
+    }
+  }
+
+  function bindDatePicker() {
+    const openForEventDate = (calendar) => () => openDatePicker({
+      value: els.date?.value,
+      calendar,
+      onPick: setEventDate,
+    });
+
+    els.date?.addEventListener("click", openForEventDate("gregorian"));
+    els.dateJalali?.addEventListener("click", openForEventDate("jalali"));
+    els.repeatUntil?.addEventListener("click", () => openDatePicker({
+      value: els.repeatUntil.value,
+      allowClear: true,
+      onPick: (iso) => { els.repeatUntil.value = iso; },
+    }));
+
+    [[els.dpYear, "y"], [els.dpMonth, "m"], [els.dpDay, "d"]].forEach(([el, field]) => {
+      el?.addEventListener("scroll", () => dpOnScroll(el, field), { passive: true });
+      el?.addEventListener("click", (e) => {
+        const item = e.target.closest(".dp-item");
+        if (item) el.scrollTo({ top: item.offsetTop - el.offsetTop, behavior: "smooth" });
+      });
+      el?.addEventListener("keydown", (e) => {
+        const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        el.scrollBy({ top: step * DP_ITEM_H, behavior: "smooth" });
+      });
+    });
+
+    els.dpTabs.forEach((tab) => tab.addEventListener("click", () => {
+      const next = tab.dataset.calendar;
+      if (next === dp.calendar) return;
+      const iso = dpToIso();          // convert through the current selection
+      dp.calendar = next;
+      dpSetFromIso(iso);
+      els.dpTabs.forEach((other) => {
+        const active = other === tab;
+        other.classList.toggle("is-active", active);
+        other.setAttribute("aria-selected", String(active));
+      });
+      dpRender();
+    }));
+
+    els.dpToday?.addEventListener("click", () => {
+      const now = new Date();
+      dpSetFromIso(`${now.getFullYear()}-${format2(now.getMonth() + 1)}-${format2(now.getDate())}`);
+      dpRender();
+    });
+
+    els.dpConfirm?.addEventListener("click", () => {
+      const pick = dp.onPick;
+      const iso = dpToIso();
+      closeDatePicker();
+      pick?.(iso);
+      try { tg?.HapticFeedback?.selectionChanged?.(); } catch (_) {}
+    });
+
+    els.dpClear?.addEventListener("click", () => {
+      const pick = dp.onPick;
+      closeDatePicker();
+      pick?.("");
+    });
+
+    els.dpCancel?.addEventListener("click", closeDatePicker);
+    els.dpOverlay?.addEventListener("click", (e) => {
+      if (e.target === els.dpOverlay) closeDatePicker();
+    });
+  }
+
   /* ── Boot ────────────────────────────────────────────── */
   // Before anything renders: the DOM pass rewrites the static markup, and
   // every later render reads currentLang through t().
   applyLanguage();
   initTelegram();
   bindEvents();
+  bindDatePicker();
   loadEvents();
   showOnboardingIfNeeded();
 })();

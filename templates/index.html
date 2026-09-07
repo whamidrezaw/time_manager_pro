@@ -193,14 +193,16 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
             Gregorian Date
           </label>
-          <input type="date" id="date" class="field-input" required>
+          <input type="text" id="date" class="field-input field-picker" required
+                 readonly inputmode="none" autocomplete="off" placeholder="2026-04-20">
         </div>
         <div class="field-group">
           <label class="field-label" for="date-jalali">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
             Jalali Date
           </label>
-          <input type="text" id="date-jalali" class="field-input" placeholder="1405/01/31" maxlength="10" inputmode="numeric" autocomplete="off" dir="ltr">
+          <input type="text" id="date-jalali" class="field-input field-picker" placeholder="1405/01/31"
+                 readonly inputmode="none" autocomplete="off" dir="ltr">
         </div>
       </div>
 
@@ -224,7 +226,8 @@
             Repeat Until
             <span class="field-optional">(optional)</span>
           </label>
-          <input type="date" id="repeatUntil" class="field-input">
+          <input type="text" id="repeatUntil" class="field-input field-picker"
+                 readonly inputmode="none" autocomplete="off" placeholder="2026-12-31">
         </div>
         <div class="field-group">
           <label class="field-label" for="category">
@@ -410,6 +413,38 @@
   </div>
 
   <!-- ── Custom Confirm Dialog ──────────────────────── -->
+  <!-- Date picker. Its own overlay rather than a sheet, because it opens on
+       top of the composer sheet that contains the fields. -->
+  <div id="dpOverlay" class="dp-overlay" hidden aria-hidden="true">
+    <div class="dp-dialog" role="dialog" aria-modal="true" aria-labelledby="dpTitle">
+      <div class="sheet-handle" aria-hidden="true"></div>
+
+      <div class="dp-head">
+        <h2 class="sheet-title" id="dpTitle">Pick a date</h2>
+        <div class="dp-tabs" role="tablist" aria-label="Calendar">
+          <button type="button" class="dp-tab is-active" data-calendar="gregorian" role="tab" aria-selected="true">Gregorian</button>
+          <button type="button" class="dp-tab" data-calendar="jalali" role="tab" aria-selected="false">Jalali</button>
+        </div>
+      </div>
+
+      <div class="dp-wheels" id="dpWheels">
+        <div class="dp-wheel" id="dpYear"  role="listbox" aria-label="Year" tabindex="0"></div>
+        <div class="dp-wheel" id="dpMonth" role="listbox" aria-label="Month" tabindex="0"></div>
+        <div class="dp-wheel" id="dpDay"   role="listbox" aria-label="Day" tabindex="0"></div>
+        <div class="dp-highlight" aria-hidden="true"></div>
+      </div>
+
+      <p class="dp-preview" id="dpPreview" aria-live="polite"></p>
+
+      <div class="dp-actions">
+        <button type="button" class="btn-secondary" id="dpToday">Today</button>
+        <button type="button" class="btn-secondary" id="dpClear" hidden>Clear</button>
+        <button type="button" class="btn-secondary" id="dpCancel">Cancel</button>
+        <button type="button" class="btn-primary" id="dpConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <div id="confirmOverlay" class="confirm-overlay" hidden aria-hidden="true">
     <div class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
       <div class="confirm-icon" id="confirmIcon">🗑️</div>
