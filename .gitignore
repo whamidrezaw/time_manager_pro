@@ -43,3 +43,6 @@ build/
 *.zip
 *.rar
 *.7z
+
+# One-off migration scripts — run them, do not commit them
+fix_batch*.py

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from app.schemas.responses import EventOut
@@ -243,8 +245,6 @@ def test_normalize_event_input_defaults_to_an_all_day_event() -> None:
 
 
 def test_normalize_event_input_schedules_a_relative_reminder() -> None:
-    from datetime import timedelta
-
     from app.services.events import _normalize_event_input
 
     doc = _normalize_event_input(
@@ -280,3 +280,45 @@ def test_normalize_event_input_marks_a_finished_series_done() -> None:
 
     assert doc["next_notify_at"] is None
     assert doc["notify_status"] == "done"
+
+
+def test_add_request_accepts_the_exact_payload_the_mini_app_sends() -> None:
+    """The request models forbid unknown keys, so a field added in app.js and
+    forgotten here would 422 in production while every unit test still passed.
+    These two dicts are the payloads submitEventForm builds, key for key."""
+    from app.schemas.requests import AddEventRequest
+    from app.services.events import _normalize_event_input
+
+    all_day_payload = {
+        "initData": "dummy",
+        "title": "Mom birthday",
+        "date": "2099-04-20",
+        "timezone": "Europe/Berlin",
+        "repeat": "yearly",
+        "category": "birthday",
+        "note": "",
+        "pinned": False,
+        "all_day": True,
+        "time_hm": None,
+        "reminders": [{"mode": "absolute", "hour": 7, "minute": 30}],
+        "reminder_hour": 7,
+        "reminder_minute": 30,
+        "repeat_until": None,
+    }
+    timed_payload = {
+        **all_day_payload,
+        "title": "Team standup",
+        "repeat": "daily",
+        "category": "work",
+        "all_day": False,
+        "time_hm": "14:30",
+        "reminders": [{"mode": "relative", "offset_minutes": 60}],
+    }
+
+    all_day_doc = _normalize_event_input(AddEventRequest(**all_day_payload))
+    assert all_day_doc["time_hm"] is None
+    assert all_day_doc["reminders"] == [{"mode": "absolute", "hour": 7, "minute": 30}]
+
+    timed_doc = _normalize_event_input(AddEventRequest(**timed_payload))
+    assert timed_doc["time_hm"] == "14:30"
+    assert timed_doc["event_ts_utc"] - timed_doc["next_notify_at"] == timedelta(minutes=60)

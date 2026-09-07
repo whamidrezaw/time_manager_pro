@@ -53,7 +53,7 @@ def test_parse_init_user_rejects_invalid_json() -> None:
     assert exc.value.detail == "INVALID_USER_JSON"
 
 
-def test_build_data_check_string_excludes_hash_and_signature() -> None:
+def test_build_data_check_string_always_excludes_hash() -> None:
     parsed = {
         "auth_date": "111",
         "user": '{"id":1}',
@@ -63,10 +63,46 @@ def test_build_data_check_string_excludes_hash_and_signature() -> None:
     }
     result = build_data_check_string(parsed)
 
-    assert "hash=" not in result
-    assert "signature=" not in result
+    assert "hash=abc" not in result
     assert "auth_date=111" in result
     assert "query_id=q1" in result
+    # Default variant follows the bot-token path in Telegram's docs, which
+    # excludes only `hash`.
+    assert "signature=sig" in result
+
+
+def test_build_data_check_string_can_also_exclude_signature() -> None:
+    parsed = {"auth_date": "111", "hash": "abc", "signature": "sig"}
+    result = build_data_check_string(parsed, exclude_signature=True)
+
+    assert "signature=" not in result
+    assert "auth_date=111" in result
+
+
+def test_hash_matches_accepts_either_data_check_string() -> None:
+    """Whichever variant Telegram's client actually signed, verification passes;
+    both are checked against the bot token, so neither can be forged."""
+    from app.services.auth import compute_telegram_hash, hash_matches
+
+    token = "123456:TEST"
+    parsed = {"auth_date": "111", "user": '{"id":1}', "signature": "sig"}
+
+    with_signature = compute_telegram_hash(parsed, token, exclude_signature=False)
+    without_signature = compute_telegram_hash(parsed, token, exclude_signature=True)
+
+    assert with_signature != without_signature
+    assert hash_matches(parsed, token, with_signature)
+    assert hash_matches(parsed, token, without_signature)
+    assert not hash_matches(parsed, token, "0" * 64)
+
+
+def test_hash_matches_rejects_a_wrong_token() -> None:
+    from app.services.auth import compute_telegram_hash, hash_matches
+
+    parsed = {"auth_date": "111", "signature": "sig"}
+    genuine = compute_telegram_hash(parsed, "123456:TEST")
+
+    assert not hash_matches(parsed, "999999:OTHER", genuine)
 
 
 def test_compute_telegram_hash_matches_manual_hmac() -> None:

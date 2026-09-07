@@ -80,20 +80,55 @@ async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
 
 # ── Core auth functions ───────────────────────────────────────────────────────
 
-# ✅ FIX: 'signature' is now excluded alongside 'hash'
-# Telegram added 'signature' field in newer clients — it must NOT be part of
-# the data_check_string, otherwise HMAC verification fails for those clients.
-_EXCLUDED_KEYS = frozenset({"hash"})
+# Telegram documents two verification paths for initData. The bot-token HMAC
+# path builds the data-check-string from every received field except `hash`.
+# The third-party Ed25519 path excludes `signature` as well. Newer clients send
+# a `signature` field on both paths, which leaves real ambiguity about which
+# string the HMAC was computed over — and picking the wrong one locks out every
+# user of that client.
+#
+# So both are accepted. Each candidate is still verified against the bot token,
+# so allowing either is exactly as strong as allowing one: an attacker who can
+# forge neither string gains nothing from there being two of them.
+_ALWAYS_EXCLUDED = frozenset({"hash"})
+_SIGNATURE_KEY = "signature"
 
-def build_data_check_string(parsed: dict[str, str]) -> str:
-    filtered = {k: v for k, v in parsed.items() if k not in _EXCLUDED_KEYS}
+
+def build_data_check_string(
+    parsed: dict[str, str],
+    exclude_signature: bool = False,
+) -> str:
+    excluded = set(_ALWAYS_EXCLUDED)
+    if exclude_signature:
+        excluded.add(_SIGNATURE_KEY)
+    filtered = {k: v for k, v in parsed.items() if k not in excluded}
     return "\n".join(f"{key}={value}" for key, value in sorted(filtered.items()))
 
 
-def compute_telegram_hash(init_data_map: dict[str, str], bot_token: str) -> str:
-    data_check_string = build_data_check_string(init_data_map)
+def compute_telegram_hash(
+    init_data_map: dict[str, str],
+    bot_token: str,
+    exclude_signature: bool = False,
+) -> str:
+    data_check_string = build_data_check_string(init_data_map, exclude_signature)
     secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
     return hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+
+def hash_matches(init_data_map: dict[str, str], bot_token: str, received_hash: str) -> bool:
+    """True when the received hash matches either accepted data-check-string.
+
+    Only tries the second variant when a `signature` field is actually present,
+    so the common case still costs one HMAC.
+    """
+    variants = [False] if _SIGNATURE_KEY not in init_data_map else [False, True]
+    return any(
+        hmac.compare_digest(
+            compute_telegram_hash(init_data_map, bot_token, exclude_signature),
+            received_hash,
+        )
+        for exclude_signature in variants
+    )
 
 
 def parse_init_data(init_data: str) -> dict[str, str]:
@@ -162,9 +197,8 @@ async def validate_init_data(
     if not received_hash:
         raise HTTPException(status_code=403, detail="NO_HASH")
 
-    computed_hash = compute_telegram_hash(parsed, settings.bot_token)
-
-    if not hmac.compare_digest(computed_hash, received_hash):
+    if not hash_matches(parsed, settings.bot_token, received_hash):
+        computed_hash = compute_telegram_hash(parsed, settings.bot_token)
         client_ip = request.client.host if request.client else "unknown"
         logger.warning(
             "Bad Telegram initData HMAC: ip=%s received=%s… computed=%s… "

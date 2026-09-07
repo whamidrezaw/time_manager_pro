@@ -111,7 +111,13 @@
     pin:                $("pin"),
     note:               $("note"),
     noteCharCount:      $("noteCharCount"),
+    allDay:             $("allDay"),
+    eventTimeWrap:      $("eventTimeWrap"),
+    eventTime:          $("eventTime"),
+    reminderTimeWrap:   $("reminderTimeWrap"),
     reminderTime:       $("reminderTime"),
+    reminderOffsetWrap: $("reminderOffsetWrap"),
+    reminderOffset:     $("reminderOffset"),
 
     // Detail
     detailSheet:        $("detailSheet"),
@@ -548,7 +554,11 @@
         </div>
 
         <div class="event-dates">
-          <span>📅 ${escapeHtml(event.date_iso || "—")}</span>
+          <span>📅 ${escapeHtml(event.date_iso || "—")}${
+            event.all_day === false && event.time_hm
+              ? ` · ${escapeHtml(event.time_hm)}`
+              : ""
+          }</span>
           <span class="event-dates-sep">•</span>
           <span>🗓️ ${escapeHtml(event.date_jalali || "—")}</span>
         </div>
@@ -630,6 +640,20 @@
   function handleTgBack() { if (state.activeSheet) closeSheets(); }
 
   /* ── Composer ────────────────────────────────────────── */
+  // Kept in sync with the <option> values in index.html. Anything outside this
+  // list (an event saved by a future build, say) falls back to one hour.
+  const REMINDER_OFFSETS = [0, 15, 30, 60, 120, 1440, 10080];
+  const DEFAULT_OFFSET_MINUTES = 60;
+
+  // An all-day event has no start time, so "15 minutes before" means nothing:
+  // it takes a wall-clock reminder instead. A timed event takes an offset.
+  function updateAllDayVisibility() {
+    const allDay = els.allDay ? els.allDay.checked : true;
+    if (els.eventTimeWrap)      els.eventTimeWrap.hidden      = allDay;
+    if (els.reminderTimeWrap)   els.reminderTimeWrap.hidden   = !allDay;
+    if (els.reminderOffsetWrap) els.reminderOffsetWrap.hidden = allDay;
+  }
+
   function updateRepeatUntilVisibility() {
     if (!els.repeatUntilWrap) return;
     const isRecurring = !!(els.repeat?.value && els.repeat.value !== "none");
@@ -648,6 +672,7 @@
     if (els.composerTitle)    els.composerTitle.textContent    = "New Event";
     if (els.composerSubtitle) els.composerSubtitle.textContent = "Set title, date and repeat pattern.";
     updateRepeatUntilVisibility();
+    updateAllDayVisibility();
     if (els.saveEventBtn)     els.saveEventBtn.innerHTML       = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
       Save Event`;
@@ -666,13 +691,25 @@
     if (els.dateJalali) els.dateJalali.value = event.date_jalali|| "";
     if (els.repeat)     els.repeat.value     = event.repeat     || "none";
     if (els.category)   els.category.value   = event.category   || "general";
+    const allDay = event.all_day !== false;
+    if (els.allDay)    els.allDay.checked = allDay;
+    if (els.eventTime) els.eventTime.value = event.time_hm || "09:00";
+
+    const spec = (Array.isArray(event.reminders) && event.reminders[0]) || null;
     if (els.reminderTime) {
-      const h = String(event.reminder_hour ?? 9).padStart(2, "0");
-      const m = String(event.reminder_minute ?? 0).padStart(2, "0");
+      const h = String(spec?.mode === "absolute" ? spec.hour   : (event.reminder_hour   ?? 9)).padStart(2, "0");
+      const m = String(spec?.mode === "absolute" ? spec.minute : (event.reminder_minute ?? 0)).padStart(2, "0");
       els.reminderTime.value = `${h}:${m}`;
+    }
+    if (els.reminderOffset) {
+      const offset = spec?.mode === "relative" ? Number(spec.offset_minutes) : DEFAULT_OFFSET_MINUTES;
+      els.reminderOffset.value = String(
+        REMINDER_OFFSETS.includes(offset) ? offset : DEFAULT_OFFSET_MINUTES
+      );
     }
     if (els.repeatUntil)  els.repeatUntil.value  = event.repeat_until || "";
     updateRepeatUntilVisibility();
+    updateAllDayVisibility();
     if (els.pin)        els.pin.checked      = !!event.pinned;
     if (els.note)       els.note.value       = event.note       || "";
     if (els.noteCharCount) {
@@ -704,7 +741,11 @@
     }
     if (els.detailRepeatBadge)  els.detailRepeatBadge.textContent  = REPEAT_LABELS[ev.repeat]  || "One time";
     if (els.detailPinnedBadge)  els.detailPinnedBadge.hidden        = !ev.pinned;
-    if (els.detailDateIso)      els.detailDateIso.textContent       = ev.date_iso    || "—";
+    if (els.detailDateIso) {
+      els.detailDateIso.textContent =
+        (ev.date_iso || "—") +
+        (ev.all_day === false && ev.time_hm ? `  ·  ${ev.time_hm}` : "");
+    }
     if (els.detailDateJalali)   els.detailDateJalali.textContent    = ev.date_jalali || "—";
     if (els.detailTimezone)     els.detailTimezone.textContent      = ev.tz_name     || "UTC";
     if (els.detailStatus)       els.detailStatus.textContent        = STATUS_LABELS[ev.notify_status] || "—";
@@ -736,7 +777,14 @@
   async function submitEventForm(e) {
     e.preventDefault();
 
+    const allDay = els.allDay ? els.allDay.checked : true;
+    const eventTime = (els.eventTime?.value || "").trim();
     const [timeH, timeM] = (els.reminderTime?.value || "09:00").split(":");
+
+    const reminders = allDay
+      ? [{ mode: "absolute", hour: Number(timeH ?? 9), minute: Number(timeM ?? 0) }]
+      : [{ mode: "relative", offset_minutes: Number(els.reminderOffset?.value ?? DEFAULT_OFFSET_MINUTES) }];
+
     const payload = {
       title:    els.title?.value.trim()    || "",
       date:     els.date?.value            || "",
@@ -745,6 +793,10 @@
       category: els.category?.value        || "general",
       note:     els.note?.value.trim()     || "",
       pinned:   !!els.pin?.checked,
+      all_day:  allDay,
+      time_hm:  allDay ? null : eventTime,
+      reminders,
+      // Still sent so an older server build keeps scheduling correctly.
       reminder_hour: Number(timeH ?? 9),
       reminder_minute: Number(timeM ?? 0),
       repeat_until: (els.repeat?.value !== "none" && els.repeatUntil?.value) || null,
@@ -758,6 +810,11 @@
     if (!payload.date) {
       showToast("Please select a date.", "error");
       els.date?.focus();
+      return;
+    }
+    if (!allDay && !eventTime) {
+      showToast("Please set the event time, or mark it as an all-day event.", "error");
+      els.eventTime?.focus();
       return;
     }
 
@@ -867,6 +924,7 @@
     const text = [
       `📅 ${ev.title}`,
       `📆 Gregorian: ${ev.date_iso}`,
+      ev.all_day === false && ev.time_hm ? `🕒 Time: ${ev.time_hm}` : "",
       `🗓️ Jalali: ${ev.date_jalali}`,
       `🔄 Repeat: ${REPEAT_LABELS[ev.repeat] || "One time"}`,
       `🏷️ Category: ${CATEGORY_PLAIN[ev.category] || "General"}`,
@@ -978,6 +1036,7 @@
     els.date?.addEventListener("change", syncJalaliFromGregorian);
     els.date?.addEventListener("change", updateRepeatUntilVisibility);
     els.repeat?.addEventListener("change", updateRepeatUntilVisibility);
+    els.allDay?.addEventListener("change", updateAllDayVisibility);
     els.dateJalali?.addEventListener("change", syncGregorianFromJalali);
     els.dateJalali?.addEventListener("blur",   syncGregorianFromJalali);
 
