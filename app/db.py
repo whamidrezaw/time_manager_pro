@@ -88,6 +88,50 @@ async def ensure_indexes(settings: Settings | None = None) -> None:
     logger.info("MongoDB indexes ensured for app=%s", settings.app_name)
 
 
+async def backfill_jalali_dates(batch_size: int = 500, max_batches: int = 200) -> int:
+    """Fill date_jalali on documents written before the field was stored.
+
+    The conversion cannot be expressed in an aggregation pipeline, so this walks
+    the documents in Python. After the first successful run the initial query
+    matches nothing and the function returns straight away, which is why it is
+    safe to call on every boot.
+    """
+    from pymongo import UpdateOne
+
+    from app.utils.dates import to_jalali
+
+    events = get_events_collection()
+    updated = 0
+
+    for _ in range(max_batches):
+        cursor = events.find(
+            {"date_jalali": {"$exists": False}},
+            {"date_iso": 1},
+        ).limit(batch_size)
+
+        operations = [
+            UpdateOne(
+                {"_id": doc["_id"]},
+                {"$set": {"date_jalali": to_jalali(doc.get("date_iso", ""))}},
+            )
+            async for doc in cursor
+        ]
+
+        if not operations:
+            break
+
+        result = await events.bulk_write(operations, ordered=False)
+        updated += result.modified_count
+
+        if len(operations) < batch_size:
+            break
+
+    if updated:
+        logger.info("Backfilled date_jalali on %s events", updated)
+
+    return updated
+
+
 async def ping_database() -> bool:
     db = get_database()
     await db.command("ping")

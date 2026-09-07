@@ -29,6 +29,7 @@ from app.utils.dates import (
     to_jalali,
 )
 from app.utils.ids import safe_object_id
+from app.utils.text import regex_clause, search_variants
 
 logger = logging.getLogger("tm_pro.events")
 
@@ -48,7 +49,7 @@ def serialize_event(doc: dict) -> EventOut:
         id=str(doc["_id"]),
         title=doc.get("title", ""),
         date_iso=date_iso,
-        date_jalali=to_jalali(date_iso),
+        date_jalali=doc.get("date_jalali") or to_jalali(date_iso),
         repeat=doc.get("repeat", "none"),
         notify_status=doc.get("notify_status", "pending"),
         tz_name=doc.get("tz_name", "UTC"),
@@ -139,6 +140,9 @@ def _normalize_event_input(
     return {
         "title":                title,
         "date_iso":             payload.date,
+        # Stored, not just computed on read: the Jalali date has to be in the
+        # document for a Mongo query to be able to search it.
+        "date_jalali":          to_jalali(payload.date),
         "all_day":              all_day,
         "time_hm":              time_hm,
         "reminders":            reminders,
@@ -160,6 +164,38 @@ def _normalize_event_input(
     }
 
 
+def build_list_query(user_id: str, payload: ListEventsRequest) -> dict:
+    """Mongo filter for one page of a user's events.
+
+    Every branch keeps user_id in the filter, so the regex search can only ever
+    scan the documents belonging to the caller.
+    """
+    query: dict = {"user_id": user_id}
+
+    if payload.filter == "pinned":
+        query["pinned"] = True
+    elif payload.filter != "all":
+        query["category"] = payload.filter
+
+    clauses: list[dict] = []
+    for term in search_variants(payload.q):
+        clauses.append(regex_clause("title", term))
+        clauses.append(regex_clause("note", term))
+        clauses.append(regex_clause("date_iso", term, case_insensitive=False))
+        clauses.append(regex_clause("date_jalali", term, case_insensitive=False))
+
+        # The old client-side search also matched the category label shown in
+        # the UI, which is the stored value itself.
+        matched = sorted(c for c in VALID_CATEGORIES if term.lower() in c)
+        if matched:
+            clauses.append({"category": {"$in": matched}})
+
+    if clauses:
+        query["$or"] = clauses
+
+    return query
+
+
 async def list_events_for_user(
     user_id: str,
     payload: ListEventsRequest,
@@ -167,7 +203,7 @@ async def list_events_for_user(
     events_coll = get_events_collection()
 
     cursor = (
-        events_coll.find({"user_id": user_id})
+        events_coll.find(build_list_query(user_id, payload))
         .sort([("pinned", -1), ("event_ts_utc", 1)])
         .skip(payload.skip)
         .limit(PAGE_SIZE + 1)

@@ -21,7 +21,7 @@ from app.schemas.responses import (
     NoteResponse,
     PinResponse,
 )
-from app.services.auth import get_authenticated_user_id
+from app.services.auth import READ_SCOPE, get_authenticated_user_id
 from app.services.events import (
     add_event_for_user,
     delete_event_for_user,
@@ -37,7 +37,7 @@ logger = logging.getLogger("tm_pro.events")
 
 @router.post("/list", response_model=ListEventsResponse)
 async def api_list(request: Request, payload: ListEventsRequest) -> ListEventsResponse:
-    user_id = await get_authenticated_user_id(request, payload.initData)
+    user_id = await get_authenticated_user_id(request, payload.initData, scope=READ_SCOPE)
     targets, has_more = await list_events_for_user(user_id, payload)
 
     return ListEventsResponse(

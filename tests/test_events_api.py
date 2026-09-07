@@ -32,7 +32,7 @@ async def test_health_endpoint(async_client) -> None:
 async def test_api_list_returns_targets(async_client) -> None:
     from app.routes import events as events_module
 
-    async def fake_get_authenticated_user_id(request, init_data: str) -> str:
+    async def fake_get_authenticated_user_id(request, init_data: str, **kwargs) -> str:
         return "123"
 
     async def fake_list_events_for_user(user_id: str, payload):
@@ -83,7 +83,7 @@ async def test_api_add_success(async_client) -> None:
 
     captured: dict = {}
 
-    async def fake_get_authenticated_user_id(request, init_data: str) -> str:
+    async def fake_get_authenticated_user_id(request, init_data: str, **kwargs) -> str:
         return "123"
 
     async def fake_add_event_for_user(user_id: str, payload) -> None:
@@ -144,7 +144,7 @@ async def test_api_add_rejects_invalid_payload(async_client) -> None:
 async def test_api_note_success(async_client) -> None:
     from app.routes import events as events_module
 
-    async def fake_get_authenticated_user_id(request, init_data: str) -> str:
+    async def fake_get_authenticated_user_id(request, init_data: str, **kwargs) -> str:
         return "123"
 
     async def fake_save_note_for_user(user_id: str, payload) -> str:
@@ -180,7 +180,7 @@ async def test_api_note_success(async_client) -> None:
 async def test_api_pin_success(async_client) -> None:
     from app.routes import events as events_module
 
-    async def fake_get_authenticated_user_id(request, init_data: str) -> str:
+    async def fake_get_authenticated_user_id(request, init_data: str, **kwargs) -> str:
         return "123"
 
     async def fake_set_pin_for_user(user_id: str, payload) -> bool:

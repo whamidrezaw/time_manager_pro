@@ -26,8 +26,28 @@ CategoryType = Literal[
 ]
 
 
+ListFilterType = Literal[
+    "all",
+    "pinned",
+    "general",
+    "birthday",
+    "work",
+    "family",
+    "health",
+    "travel",
+    "finance",
+    "study",
+    "other",
+]
+
+
 class ListEventsRequest(InitDataPayload):
     skip: int = Field(default=0, ge=0, le=5000)
+    # Searching and filtering moved to the server: doing it in the browser only
+    # ever saw the 50 events of the current page, so a match on page 3 looked
+    # like no match at all.
+    q: str = Field(default="", max_length=100)
+    filter: ListFilterType = "all"
 
 
 class EventBaseRequest(InitDataPayload):

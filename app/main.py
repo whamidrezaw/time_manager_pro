@@ -9,7 +9,12 @@ from fastapi.staticfiles import StaticFiles
 from telegram import Bot
 
 from app.config import get_settings
-from app.db import close_mongo_connection, connect_to_mongo, ensure_indexes
+from app.db import (
+    backfill_jalali_dates,
+    close_mongo_connection,
+    connect_to_mongo,
+    ensure_indexes,
+)
 from app.routes.events import router as events_router
 from app.routes.health import router as health_router
 from app.routes.telegram import router as telegram_router
@@ -51,6 +56,13 @@ async def lifespan(app: FastAPI):
 
     await connect_to_mongo(settings)
     await ensure_indexes(settings)
+
+    # One-off migration: a no-op on every boot after the first, and a failure
+    # here must not stop the app from serving.
+    try:
+        await backfill_jalali_dates()
+    except Exception:
+        logger.exception("date_jalali backfill failed; search on Jalali dates may be incomplete")
 
     yield
 

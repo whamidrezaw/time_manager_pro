@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     max_note_len: int = Field(default=2000, alias="MAX_NOTE_LEN")
     max_events_per_user: int = Field(default=500, alias="MAX_EVENTS_PER_USER")
     rate_limit_count: int = Field(default=30, alias="RATE_LIMIT_COUNT")
+    # Reads are cheap and the search box fires one per query, so they get their
+    # own budget. Writes stay on the tighter one.
+    rate_limit_read_count: int = Field(default=120, alias="RATE_LIMIT_READ_COUNT")
 
     reminder_batch_size: int = Field(default=200, alias="REMINDER_BATCH_SIZE")
     stale_processing_secs: int = Field(default=300, alias="STALE_PROCESSING_SECS")
@@ -85,6 +88,9 @@ class Settings(BaseSettings):
 
         if self.rate_limit_count < 1:
             raise ValueError("RATE_LIMIT_COUNT must be >= 1")
+
+        if self.rate_limit_read_count < 1:
+            raise ValueError("RATE_LIMIT_READ_COUNT must be >= 1")
 
         if self.reminder_batch_size < 1:
             raise ValueError("REMINDER_BATCH_SIZE must be >= 1")

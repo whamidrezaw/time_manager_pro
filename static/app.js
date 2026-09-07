@@ -325,6 +325,10 @@
   }
 
   /* ── Load Events ─────────────────────────────────────── */
+  // Long enough that a normal typing burst is one request, short enough that
+  // the list still feels like it reacts as you type.
+  const SEARCH_DEBOUNCE_MS = 350;
+
   async function loadEvents(append = false) {
     if (!append) {
       state.skip = 0;
@@ -338,7 +342,11 @@
 
     setLoading(true);
     try {
-      const data = await apiPost("/api/list", { skip: state.skip });
+      const data = await apiPost("/api/list", {
+        skip:   state.skip,
+        q:      state.searchTerm.trim(),
+        filter: state.currentFilter,
+      });
       const newItems = Array.isArray(data.targets) ? data.targets : [];
       state.hasMore = !!data.has_more;
 
@@ -374,37 +382,31 @@
   }
 
   /* ── Filters ────────────────────────────────────────── */
+  // The search and the filter are applied by the Mongo query behind /api/list,
+  // so what comes back is already the result set. Filtering again here would
+  // only ever narrow it to the current page, which is the bug this replaced.
   function applyFilters() {
-    const q = state.searchTerm.trim().toLowerCase();
-    state.filteredEvents = state.events.filter((item) => {
-      const matchFilter =
-        state.currentFilter === "all"    ? true :
-        state.currentFilter === "pinned" ? item.pinned :
-        item.category === state.currentFilter;
-
-      // Search over all text fields
-      const haystack = [
-        item.title, item.note, item.date_iso, item.date_jalali,
-        CATEGORY_PLAIN[item.category] || "",
-      ].join(" ").toLowerCase();
-
-      return matchFilter && (!q || haystack.includes(q));
-    });
+    state.filteredEvents = state.events;
   }
 
   /* ── State Panel ────────────────────────────────────── */
   function showStatePanel() {
-    const hasEvents   = state.events.length > 0;
-    const hasFiltered = state.filteredEvents.length > 0;
+    const isSearching = state.searchTerm.trim() !== "" || state.currentFilter !== "all";
+    const hasResults  = state.filteredEvents.length > 0;
 
-    if (els.listState)     els.listState.hidden = true;
+    if (els.listState)      els.listState.hidden      = true;
     if (els.listErrorState) els.listErrorState.hidden = true;
     if (els.noResultsState) els.noResultsState.hidden = true;
 
-    if (!hasEvents) {
-      if (els.listState) els.listState.hidden = false;
-    } else if (hasEvents && !hasFiltered) {
+    if (hasResults) return;
+
+    // Now that the server does the filtering, an empty page means one of two
+    // different things: nothing matched the query, or nothing is saved at all.
+    // Comparing events to filteredEvents can no longer tell them apart.
+    if (isSearching) {
       if (els.noResultsState) els.noResultsState.hidden = false;
+    } else if (els.listState) {
+      els.listState.hidden = false;
     }
   }
 
@@ -1046,20 +1048,28 @@
       if (els.noteCharCount) els.noteCharCount.textContent = `${len} / 2000`;
     });
 
-    // Search
+    // Search — debounced, because every keystroke would otherwise be a round
+    // trip and would burn through the per-minute budget in a few seconds.
+    let searchTimer = null;
     els.searchInput?.addEventListener("input", (e) => {
-      state.searchTerm = e.target.value || "";
-      applyFilters();
-      renderEvents();
+      const value = e.target.value || "";
+      if (value.trim() === state.searchTerm.trim()) return;
+
+      state.searchTerm = value;
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => loadEvents(), SEARCH_DEBOUNCE_MS);
     });
 
     // Filters
     els.filterButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
-        state.currentFilter = btn.dataset.filter || "all";
+        const next = btn.dataset.filter || "all";
         els.filterButtons.forEach((b) => b.classList.toggle("is-active", b === btn));
-        applyFilters();
-        renderEvents();
+        if (next === state.currentFilter) return;
+
+        state.currentFilter = next;
+        clearTimeout(searchTimer);
+        loadEvents();
       });
     });
 

@@ -26,30 +26,53 @@ logger = logging.getLogger("tm_pro.auth")
 _rate_store: dict[str, list[float]] = {}
 
 
-def _prune_rate_history(user_id: str, window_seconds: int = 60) -> list[float]:
+# Reads and writes are counted separately: a search box issues a request per
+# query, and sharing one budget would let typing lock the user out of saving.
+READ_SCOPE = "read"
+WRITE_SCOPE = "write"
+
+
+def scope_limit(scope: str, settings: Settings) -> int:
+    return settings.rate_limit_read_count if scope == READ_SCOPE else settings.rate_limit_count
+
+
+def _prune_rate_history(key: str, window_seconds: int = 60) -> list[float]:
     now = time.time()
-    history = [t for t in _rate_store.get(user_id, []) if now - t < window_seconds]
-    _rate_store[user_id] = history
+    history = [t for t in _rate_store.get(key, []) if now - t < window_seconds]
+    _rate_store[key] = history
     return history
 
 
-def _check_rate_limit_memory(user_id: str, settings: Settings) -> None:
+def _check_rate_limit_memory(
+    user_id: str,
+    settings: Settings,
+    scope: str = WRITE_SCOPE,
+) -> None:
     """Fallback in-memory rate limit — only used when MongoDB is unavailable."""
-    history = _prune_rate_history(user_id)
-    if len(history) >= settings.rate_limit_count:
-        logger.warning("Rate limit exceeded (memory fallback): user_id=%s", user_id)
+    key = f"{scope}:{user_id}"
+    history = _prune_rate_history(key)
+    if len(history) >= scope_limit(scope, settings):
+        logger.warning("Rate limit exceeded (memory fallback): user_id=%s scope=%s", user_id, scope)
         raise HTTPException(status_code=429, detail="RATE_LIMIT")
     history.append(time.time())
-    _rate_store[user_id] = history
+    _rate_store[key] = history
 
 
-def check_rate_limit(user_id: str, settings: Settings | None = None) -> None:
+def check_rate_limit(
+    user_id: str,
+    settings: Settings | None = None,
+    scope: str = WRITE_SCOPE,
+) -> None:
     """Sync version — only used in tests."""
     settings = settings or get_settings()
-    _check_rate_limit_memory(user_id, settings)
+    _check_rate_limit_memory(user_id, settings, scope)
 
 
-async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
+async def check_rate_limit_mongo(
+    user_id: str,
+    settings: Settings,
+    scope: str = WRITE_SCOPE,
+) -> None:
     try:
         from app.db import get_database
         db = get_database()
@@ -58,24 +81,30 @@ async def check_rate_limit_mongo(user_id: str, settings: Settings) -> None:
         now = datetime.now(timezone.utc)
         bucket = now.replace(second=0, microsecond=0)
 
+        # Both counters live in the same document, keyed the same way as before.
+        # A separate document per scope would need the unique index on
+        # (user_id, bucket) rebuilt, and dropping a live unique index is not
+        # worth it for two integers.
+        field = "read_count" if scope == READ_SCOPE else "count"
+
         doc = await rate_coll.find_one_and_update(
             {"user_id": user_id, "bucket": bucket},
             {
-                "$inc": {"count": 1},
+                "$inc": {field: 1},
                 "$setOnInsert": {"ts": now},
             },
             upsert=True,
             return_document=ReturnDocument.AFTER,
         )
 
-        if int(doc.get("count", 0)) > settings.rate_limit_count:
+        if int(doc.get(field, 0)) > scope_limit(scope, settings):
             raise HTTPException(status_code=429, detail="RATE_LIMIT")
 
     except HTTPException:
         raise
     except Exception as exc:
         logger.warning("Rate limit mongo unavailable, using memory fallback: %s", exc)
-        _check_rate_limit_memory(user_id, settings)
+        _check_rate_limit_memory(user_id, settings, scope)
 
 
 # ── Core auth functions ───────────────────────────────────────────────────────
@@ -185,6 +214,7 @@ async def validate_init_data(
     request: Request,
     init_data: str,
     settings: Settings | None = None,
+    scope: str = WRITE_SCOPE,
 ) -> dict[str, Any]:
     settings = settings or get_settings()
 
@@ -226,7 +256,7 @@ async def validate_init_data(
     if not user_id or not user_id.isdigit():
         raise HTTPException(status_code=403, detail="INVALID_ID")
 
-    await check_rate_limit_mongo(user_id, settings)
+    await check_rate_limit_mongo(user_id, settings, scope)
 
     return {
         "user_id": user_id,
@@ -239,6 +269,7 @@ async def get_authenticated_user_id(
     request: Request,
     init_data: str,
     settings: Settings | None = None,
+    scope: str = WRITE_SCOPE,
 ) -> str:
-    auth_result = await validate_init_data(request, init_data, settings)
+    auth_result = await validate_init_data(request, init_data, settings, scope)
     return auth_result["user_id"]

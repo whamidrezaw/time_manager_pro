@@ -160,7 +160,8 @@ def test_check_rate_limit_allows_under_limit() -> None:
     auth_module._rate_store.clear()
     settings = get_settings()
     check_rate_limit("1", settings)
-    assert "1" in auth_module._rate_store
+    # Reads and writes are counted separately, so the store is keyed by scope.
+    assert "write:1" in auth_module._rate_store
 
 
 def test_check_rate_limit_blocks_when_limit_reached() -> None:
@@ -174,7 +175,7 @@ def test_check_rate_limit_blocks_when_limit_reached() -> None:
     # ancient timestamps (e.g. 1.0) makes this test pass even when the real
     # limiter is broken, and fail even when it's working correctly.
     now = time.time()
-    auth_module._rate_store["99"] = [now - 1] * settings.rate_limit_count
+    auth_module._rate_store["write:99"] = [now - 1] * settings.rate_limit_count
     with pytest.raises(HTTPException) as exc:
         check_rate_limit("99", settings)
 
@@ -241,3 +242,38 @@ async def test_validate_init_data_rejects_bad_hash() -> None:
 
     assert exc.value.status_code == 403
     assert exc.value.detail == "BAD_HASH"
+
+
+def test_read_and_write_rate_limits_are_counted_separately() -> None:
+    """Typing in the search box must not be able to lock the user out of saving,
+    and vice versa."""
+    from app.services import auth as auth_module
+    from app.services.auth import READ_SCOPE, WRITE_SCOPE
+
+    auth_module._rate_store.clear()
+    settings = get_settings()
+    now = time.time()
+
+    auth_module._rate_store["write:42"] = [now - 1] * settings.rate_limit_count
+
+    with pytest.raises(HTTPException):
+        check_rate_limit("42", settings, scope=WRITE_SCOPE)
+
+    check_rate_limit("42", settings, scope=READ_SCOPE)
+    assert "read:42" in auth_module._rate_store
+
+
+def test_read_rate_limit_uses_the_read_budget() -> None:
+    from app.services import auth as auth_module
+    from app.services.auth import READ_SCOPE
+
+    auth_module._rate_store.clear()
+    settings = get_settings()
+    now = time.time()
+
+    auth_module._rate_store["read:43"] = [now - 1] * settings.rate_limit_read_count
+
+    with pytest.raises(HTTPException) as excinfo:
+        check_rate_limit("43", settings, scope=READ_SCOPE)
+
+    assert excinfo.value.status_code == 429
