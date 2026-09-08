@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     max_title_len: int = Field(default=200, alias="MAX_TITLE_LEN")
     max_note_len: int = Field(default=2000, alias="MAX_NOTE_LEN")
     max_events_per_user: int = Field(default=500, alias="MAX_EVENTS_PER_USER")
+
+    # Batch 12a. max_events_per_user is now the hard ceiling nobody passes;
+    # what a given user may actually store is base + bonus per referral step,
+    # computed in app/services/referrals.py.
+    event_limit_base: int = Field(default=20, alias="EVENT_LIMIT_BASE")
+    referral_step: int = Field(default=3, alias="REFERRAL_STEP")
+    referral_bonus: int = Field(default=20, alias="REFERRAL_BONUS")
     rate_limit_count: int = Field(default=30, alias="RATE_LIMIT_COUNT")
     # Reads are cheap and the search box fires one per query, so they get their
     # own budget. Writes stay on the tighter one.

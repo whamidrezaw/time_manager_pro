@@ -81,6 +81,13 @@ async def ensure_indexes(settings: Settings | None = None) -> None:
     await events.create_index([("user_id", 1), ("category", 1)])
     await events.create_index([("notify_status", 1), ("processing_started_at", 1)])
 
+    users = get_users_collection()
+
+    # sparse: user documents written before Batch 12a carry no ref_code,
+    # and a plain unique index would reject all but the first of them.
+    await users.create_index("ref_code", unique=True, sparse=True)
+    await users.create_index([("referred_by", 1), ("referral_status", 1)])
+
     rate_limits = get_database()["rate_limits"]
     await rate_limits.create_index("ts", expireAfterSeconds=60)
     await rate_limits.create_index([("user_id", 1), ("bucket", 1)], unique=True)

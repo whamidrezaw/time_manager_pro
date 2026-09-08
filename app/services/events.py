@@ -269,8 +269,13 @@ async def add_event_for_user(
         user_id, payload.title, payload.date, payload.timezone,
     )
 
+    # Imported here rather than at module scope to keep this module's
+    # import graph flat, the same way check_rate_limit_mongo pulls in
+    # get_database. The limit is derived per user now, not a constant.
+    from app.services.referrals import effective_event_limit
+
     count = await events_coll.count_documents({"user_id": user_id})
-    if count >= settings.max_events_per_user:
+    if count >= await effective_event_limit(user_id, settings):
         raise HTTPException(status_code=400, detail="EVENT_LIMIT_REACHED")
 
     event_data = _normalize_event_input(payload, settings)
@@ -285,6 +290,21 @@ async def add_event_for_user(
 
     result = await events_coll.insert_one(event_data)
     logger.info("event inserted user_id=%s event_id=%s", user_id, result.inserted_id)
+
+    # Batch 12a: an invite only counts once the invited person has actually
+    # made something. After the insert, never before it — a save that fails
+    # must not be able to award anyone a bonus.
+    try:
+        from app.services.referrals import (
+            activate_referral_if_first_event,
+            notify_referrer_bonus,
+        )
+
+        earned = await activate_referral_if_first_event(user_id)
+        if earned:
+            await notify_referrer_bonus(*earned)
+    except Exception:
+        logger.exception("referral activation failed user_id=%s", user_id)
 
 
 async def edit_event_for_user(

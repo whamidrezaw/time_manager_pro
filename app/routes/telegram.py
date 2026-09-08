@@ -71,6 +71,20 @@ def parse_command(text: str) -> str:
     return parts[0].split("@", 1)[0].lower()
 
 
+def parse_start_payload(text: str) -> str:
+    """The argument after /start, or '' when there is none.
+
+    Separate from parse_command on purpose: that function normalises a
+    message down to the bare command and its tests guarantee the payload is
+    dropped. Reading the payload is a different question, so it gets its own
+    function instead of a second return value nobody else wants.
+    """
+    parts = (text or "").strip().split(maxsplit=1)
+    if len(parts) < 2 or not parts[0].startswith("/"):
+        return ""
+    return parts[1].strip()
+
+
 async def _handle_message(update: Update, bot: Bot, settings: Settings) -> None:
     message = update.message
     command = parse_command(message.text or "")
@@ -81,6 +95,7 @@ async def _handle_message(update: Update, bot: Bot, settings: Settings) -> None:
 
     if command == "/start":
         key = "start"
+        await _attach_referral_from_start(message)
     elif command == "/help":
         key = "help"
     else:
@@ -125,3 +140,23 @@ async def _safe_answer(bot: Bot, callback_query_id: str, text: str) -> None:
         await bot.answer_callback_query(callback_query_id, text=text)
     except Exception:
         logger.exception("Failed to answer callback query id=%s", callback_query_id)
+
+
+async def _attach_referral_from_start(message) -> None:
+    """Credit whoever's link brought this person here. Best effort.
+
+    A failure here is invisible to the user by design: they came to use the
+    bot, and the welcome message matters more than the bookkeeping.
+    """
+    code = parse_start_payload(message.text or "")
+    if not code:
+        return
+
+    try:
+        from app.services.referrals import attach_referrer, parse_ref_payload
+
+        normalized = parse_ref_payload(code)
+        if normalized:
+            await attach_referrer(str(message.from_user.id), normalized)
+    except Exception:
+        logger.exception("referral attach failed chat_id=%s", message.chat_id)

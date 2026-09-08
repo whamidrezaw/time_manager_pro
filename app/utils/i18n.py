@@ -74,6 +74,18 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fa": "به تعویق انداختن این رویداد ممکن نشد.",
     },
     "unknown_action": {"en": "Unknown action.", "fa": "این دستور شناخته نشد."},
+    "referral_bonus_granted": {
+        "en": (
+            "🎁 <b>Your limit just went up!</b>\n\n"
+            "Someone you invited saved their first event. "
+            "You can now keep up to <b>{limit}</b> events."
+        ),
+        "fa": (
+            "🎁 <b>سقف شما بالا رفت!</b>\n\n"
+            "کسی که دعوت کرده بودید اولین رویدادش را ذخیره کرد. "
+            "حالا می‌توانید تا <b>{limit}</b> رویداد داشته باشید."
+        ),
+    },
     "reminder_title": {"en": "🔔 <b>Reminder</b>", "fa": "🔔 <b>یادآوری</b>"},
     "label_category": {"en": "🏷️", "fa": "🏷️"},
     "repeat_none":    {"en": "One-time",  "fa": "یک‌بار"},
