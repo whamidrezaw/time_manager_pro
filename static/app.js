@@ -2151,6 +2151,20 @@
     });
   }
 
+  /* ── Published surface ───────────────────────────────
+     views.js lives outside this closure and needs three things from it: a way
+     into the detail sheet, the loaded events, and the Jalali conversion. The
+     last one matters most — a second date conversion in another file is how
+     two parts of the same app start disagreeing about what day it is. */
+  window.TMApp = {
+    openDetail,
+    getEvent: getEventById,
+    reload: loadEvents,
+    language: () => currentLang,
+    jalali: { fromGregorian: gregorianToJalali, toGregorian: jalaliToGregorian,
+              daysInMonth: daysInJalaliMonth },
+  };
+
   /* ── Boot ────────────────────────────────────────────── */
   // Before anything renders: the DOM pass rewrites the static markup, and
   // every later render reads currentLang through t().

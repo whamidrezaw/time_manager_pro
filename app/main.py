@@ -16,6 +16,7 @@ from app.db import (
     ensure_indexes,
     stop_expiring_one_off_events,
 )
+from app.routes.calendar import router as calendar_router
 from app.routes.events import router as events_router
 from app.routes.health import router as health_router
 from app.routes.referral import router as referral_router
@@ -85,6 +86,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.include_router(health_router)
 app.include_router(web_router)
 app.include_router(events_router)
+app.include_router(calendar_router)
 app.include_router(referral_router)
 app.include_router(share_router)
 app.include_router(telegram_router)
