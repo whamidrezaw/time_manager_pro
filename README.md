@@ -120,6 +120,7 @@ list with comments.
 | `RATE_LIMIT_COUNT` | Requests allowed per user per minute |
 | `MAX_EVENTS_PER_USER`, `MAX_TITLE_LEN`, `MAX_NOTE_LEN` | Per-user limits (`MAX_EVENTS_PER_USER` is the hard ceiling) |
 | `EVENT_LIMIT_BASE`, `REFERRAL_STEP`, `REFERRAL_BONUS` | Referral reward: start at 20 events, +20 per 3 valid invites |
+| `WEBAPP_BASE_URL` | Also the origin of public countdown links (`/c/<token>`) and share cards |
 | `REMINDER_POLL_INTERVAL_SECS`, `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Worker tuning |
 
 ## Tests

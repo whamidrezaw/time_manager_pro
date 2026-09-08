@@ -81,6 +81,11 @@ async def ensure_indexes(settings: Settings | None = None) -> None:
     await events.create_index([("user_id", 1), ("category", 1)])
     await events.create_index([("notify_status", 1), ("processing_started_at", 1)])
 
+    # Batch 12b. Sparse because only events the owner has actually shared
+    # carry a token, and unique because the token is the only thing
+    # standing between a public URL and someone else's event.
+    await events.create_index("public_token", unique=True, sparse=True)
+
     users = get_users_collection()
 
     # sparse: user documents written before Batch 12a carry no ref_code,

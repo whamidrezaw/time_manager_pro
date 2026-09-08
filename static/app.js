@@ -1199,6 +1199,14 @@
     const ev = getEventById(state.detailEventId);
     if (!ev) return;
 
+    // Batch 12b: the picture card and the public link live in share.js.
+    // The plain-text share below stays as the fallback for the case
+    // where that file failed to load.
+    if (window.TMShare && typeof window.TMShare.open === "function") {
+      window.TMShare.open(ev);
+      return;
+    }
+
     const text = [
       `📅 ${ev.title}`,
       `📆 Gregorian: ${ev.date_iso}`,

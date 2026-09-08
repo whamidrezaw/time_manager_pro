@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}" dir="{{ direction }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{ title }}</title>
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="{{ title }}" />
+  <meta property="og:url" content="{{ page_url }}" />
+  <meta property="og:image" content="{{ card_url }}" />
+  <meta property="og:image:width" content="1080" />
+  <meta property="og:image:height" content="1080" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="{{ card_url }}" />
+  <meta name="robots" content="noindex" />
+
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100svh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 24px;
+      padding: 24px;
+      background: radial-gradient(circle at 20% 0%, #4f46e5, #2e1065 70%);
+      color: #fff;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    img {
+      width: min(100%, 460px); height: auto;
+      border-radius: 28px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    }
+    a.cta {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 54px; padding: 0 32px;
+      border-radius: 999px;
+      background: #fff; color: #4f46e5;
+      font-size: 1rem; font-weight: 700; text-decoration: none;
+    }
+    a.cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+    footer { font-size: 0.82rem; opacity: 0.7; text-align: center; }
+  </style>
+</head>
+<body>
+  <img src="{{ card_url }}" alt="{{ title }}" />
+  <a class="cta" href="{{ miniapp_url }}">{{ open_label }}</a>
+  <footer>{{ made_with }} · {{ bot_handle }}</footer>
+
+  <script>
+    // Telegram's Android in-app browser identifies itself; iOS usually does
+    // not. So this is an opportunistic shortcut, never the only way through —
+    // the button above is what everyone else uses.
+    if (/Telegram/i.test(navigator.userAgent)) {
+      window.location.replace("{{ miniapp_url }}");
+    }
+  </script>
+</body>
+</html>

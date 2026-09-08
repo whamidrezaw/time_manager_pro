@@ -19,6 +19,7 @@ from app.db import (
 from app.routes.events import router as events_router
 from app.routes.health import router as health_router
 from app.routes.referral import router as referral_router
+from app.routes.share import router as share_router
 from app.routes.telegram import router as telegram_router
 from app.routes.web import router as web_router
 
@@ -85,4 +86,5 @@ app.include_router(health_router)
 app.include_router(web_router)
 app.include_router(events_router)
 app.include_router(referral_router)
+app.include_router(share_router)
 app.include_router(telegram_router)

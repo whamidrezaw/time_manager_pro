@@ -74,6 +74,22 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fa": "به تعویق انداختن این رویداد ممکن نشد.",
     },
     "unknown_action": {"en": "Unknown action.", "fa": "این دستور شناخته نشد."},
+    "card_days_left": {"en": "days left", "fa": "روز مانده"},
+    "card_days_ago": {"en": "days ago", "fa": "روز گذشته"},
+    "card_today": {"en": "Today", "fa": "امروز"},
+    "card_gregorian": {"en": "Gregorian", "fa": "میلادی"},
+    "card_jalali": {"en": "Jalali", "fa": "شمسی"},
+    "card_time": {"en": "Time", "fa": "ساعت"},
+    "share_caption": {
+        "en": "<b>{title}</b> — counting down with TimeManager Pro.",
+        "fa": "<b>{title}</b> — شمارش معکوس با تایم‌منیجر پرو.",
+    },
+    "share_button": {"en": "Open in TimeManager", "fa": "باز کردن در تایم‌منیجر"},
+    "share_open_button": {"en": "Open in Telegram", "fa": "باز کردن در تلگرام"},
+    "share_made_with": {
+        "en": "Made with TimeManager Pro",
+        "fa": "ساخته‌شده با تایم‌منیجر پرو",
+    },
     "referral_bonus_granted": {
         "en": (
             "🎁 <b>Your limit just went up!</b>\n\n"
