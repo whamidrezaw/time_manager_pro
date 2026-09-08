@@ -6,7 +6,7 @@
 [tool.ruff]
 line-length = 110
 target-version = "py312"
-exclude = [".venv", "venv", "__pycache__", ".ruff_cache", ".pytest_cache"]
+exclude = [".venv", "venv", "__pycache__", ".ruff_cache", ".pytest_cache", "apply_*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
