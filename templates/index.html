@@ -329,16 +329,12 @@
   </section>
 
   <!-- ── Detail Sheet ───────────────────────────────── -->
-  <section id="detailSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true" hidden>
-    <div class="sheet-handle" aria-hidden="true"></div>
+  <section id="detailSheet" class="sheet detail-page" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true" hidden>
     <div class="sheet-head">
-      <div>
-        <h2 id="detailTitle" class="sheet-title">Event Details</h2>
-        <p id="detailSubtitle" class="sheet-subtitle">Full view and actions</p>
-      </div>
-      <button type="button" id="closeDetailX" class="icon-btn" aria-label="Close details">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      <button type="button" id="closeDetailX" class="icon-btn detail-back" aria-label="Close details">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
+      <h2 id="detailTitle" class="sheet-title">Event Details</h2>
     </div>
 
     <article class="detail-card">
@@ -361,19 +357,27 @@
 
       <div class="detail-meta-grid">
         <div class="detail-meta-box">
-          <span class="detail-meta-label">📅 Gregorian</span>
+          <span class="detail-meta-label" data-i18n>Gregorian</span>
           <strong id="detailDateIso">—</strong>
         </div>
         <div class="detail-meta-box">
-          <span class="detail-meta-label">🗓️ Jalali</span>
+          <span class="detail-meta-label" data-i18n>Jalali</span>
           <strong id="detailDateJalali">—</strong>
         </div>
         <div class="detail-meta-box">
-          <span class="detail-meta-label">🌍 Timezone</span>
+          <span class="detail-meta-label" data-i18n>Time</span>
+          <strong id="detailTime">—</strong>
+        </div>
+        <div class="detail-meta-box">
+          <span class="detail-meta-label" data-i18n>Reminder</span>
+          <strong id="detailReminder">—</strong>
+        </div>
+        <div class="detail-meta-box">
+          <span class="detail-meta-label" data-i18n>Timezone</span>
           <strong id="detailTimezone">—</strong>
         </div>
         <div class="detail-meta-box">
-          <span class="detail-meta-label">🔔 Status</span>
+          <span class="detail-meta-label" data-i18n>Status</span>
           <strong id="detailStatus">—</strong>
         </div>
       </div>

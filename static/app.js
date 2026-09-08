@@ -1381,6 +1381,17 @@
         (ev.all_day === false && ev.time_hm ? `  ·  ${ev.time_hm}` : "");
     }
     if (els.detailDateJalali)   els.detailDateJalali.textContent    = ev.date_jalali || "—";
+    // Queried here rather than added to els: two more entries in that map for
+    // two labels is not worth the churn, and the page renders once per open.
+    const timeBox = document.getElementById("detailTime");
+    if (timeBox) {
+      timeBox.textContent = ev.all_day === false && ev.time_hm ? ev.time_hm : t("All day");
+    }
+    const reminderBox = document.getElementById("detailReminder");
+    if (reminderBox) {
+      reminderBox.textContent = reminderTimeText(ev) || t("Before the event");
+    }
+
     if (els.detailTimezone)     els.detailTimezone.textContent      = ev.tz_name     || "UTC";
     if (els.detailStatus)       els.detailStatus.textContent        = t(STATUS_LABELS[ev.notify_status] || "—");
     if (els.detailNote)         els.detailNote.value                = ev.note        || "";
@@ -1404,7 +1415,9 @@
       els.detailCountdownText.textContent = cd.fullText;
     }
 
-    openSheet("detailSheet", els.detailNote);
+    // No focus target any more. On a full page, focusing the note threw the
+    // keyboard up over the event the moment it opened.
+    openSheet("detailSheet");
   }
 
   /* ── Form Submit (Add / Edit) ────────────────────────── */
