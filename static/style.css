@@ -1545,3 +1545,38 @@ a { color: var(--link); }
 @media (prefers-reduced-motion: reduce) {
   .day-overlay, .day-dialog { transition: none; }
 }
+
+/* ── Batch 13c — tab bar, year strip, today button ───── */
+
+/* The bar was sitting on z-index 40, above the add button on 35, and swallowed
+   it. It belongs under the button and well under the sheets, which start at 40. */
+.tabbar { z-index: 30; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* ...and the button has to clear the bar rather than sit behind it. */
+.floating-add-btn { bottom: calc(var(--safe-bottom) + 62px); }
+
+.cal-head-mid { display: inline-flex; align-items: center; gap: 8px; }
+.cal-today {
+  padding: 3px 12px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-family: inherit; font-size: 0.72rem; font-weight: 700;
+  cursor: pointer;
+}
+.cal-today:active { background: var(--surface-2); }
+
+/* The year grid, demoted from its own tab to a strip. It costs about forty
+   pixels here and still shows the shape of the whole year at a glance. */
+.year-strip {
+  display: grid; grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column; grid-auto-columns: 1fr;
+  gap: 1.5px;
+  direction: ltr;
+  margin-bottom: 18px;
+}
+.year-strip .px { border-radius: 1.5px; }
+.year-strip .px.is-today { box-shadow: 0 0 0 1.5px var(--tone-today); }
+
+.year-legend { display: none; }

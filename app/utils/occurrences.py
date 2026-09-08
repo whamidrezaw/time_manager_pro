@@ -72,6 +72,18 @@ def expand_occurrences(event: dict, start: date, end: date,
 
     until = event.get("repeat_until")
     anchor_day = int(date_iso[8:10] or 1)
+
+    # A repeat rule on its own never ends, so replaying it forward invents
+    # occurrences the event will never actually have. The worker already
+    # decided when the series was over — it wrote notify_status "done" and
+    # left event_ts_utc on the last real occurrence — so the calendar stops
+    # exactly where the reminders did instead of drawing dots into eternity.
+    if str(event.get("notify_status")) == "done":
+        last = event.get("event_ts_utc")
+        if isinstance(last, datetime):
+            end = min(end, last.astimezone(tz).date())
+            if end < start:
+                return []
     occurrence = _fast_forward(occurrence, repeat, tz, start)
 
     found: list[date] = []

@@ -28,6 +28,8 @@ MAX_ITEMS = 400
 PROJECTION = {
     "title": 1, "date_iso": 1, "tz_name": 1, "all_day": 1, "time_hm": 1,
     "repeat": 1, "repeat_until": 1, "category": 1, "pinned": 1,
+    # Both are what tells expand_occurrences that a series has already ended.
+    "notify_status": 1, "event_ts_utc": 1,
 }
 
 

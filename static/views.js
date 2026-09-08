@@ -1,9 +1,9 @@
 /* ──────────────────────────────────────────────────────────────
-   views.js — Batch 13b: the month grid, the year grid, the day sheet.
+   views.js — the month view, with the year strip above it.
 
    Standalone like referral.js and share.js. Everything it needs from the
-   main closure comes through window.TMApp, and if that is missing the tab
-   bar simply never appears — the list keeps working on its own.
+   main closure comes through window.TMApp; if that is missing the tab bar
+   never appears and the list keeps working on its own.
    ────────────────────────────────────────────────────────────── */
 (function () {
   "use strict";
@@ -11,13 +11,13 @@
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 
   var FA = {
-    "List": "لیست", "Month": "ماه", "Year": "سال",
+    "List": "لیست", "Month": "ماه", "Today": "امروز",
     "No events on this day.": "این روز رویدادی ندارد.",
     "Close": "بستن",
     "Could not load the calendar.": "تقویم بارگذاری نشد.",
-    "Today": "امروز",
-    "Less": "کمتر", "More": "بیشتر",
     "all day": "تمام‌روز",
+    "Previous month": "ماه قبل", "Next month": "ماه بعد",
+    "Go to today": "برو به امروز",
   };
 
   var JALALI_MONTHS = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
@@ -50,50 +50,52 @@
     return y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
   }
 
-  function todayParts() {
-    var now = new Date();
-    return { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() };
+  function isoOf(dateObj) {
+    return iso(dateObj.getFullYear(), dateObj.getMonth() + 1, dateObj.getDate());
   }
 
   /* ── Calendar maths ─────────────────────────────────
      Persian users get a Jalali year, everyone else a Gregorian one. The
-     conversion itself is borrowed from app.js rather than written again. */
+     conversion is borrowed from app.js rather than written again — two files
+     disagreeing about what day it is would be a very hard bug to see. */
 
   var J = (window.TMApp && window.TMApp.jalali) || null;
+  var useJalali = isFa && !!J;
 
   function gregorianDaysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
 
   function monthMeta(y, m) {
-    if (isFa && J) {
+    if (useJalali) {
       var first = J.toGregorian(y, m, 1);
       var start = new Date(first.gy, first.gm - 1, first.gd);
       return {
         label: JALALI_MONTHS[m - 1] + " " + num(y),
         days: J.daysInMonth(y, m),
-        // Saturday starts the Persian week.
-        offset: (start.getDay() + 1) % 7,
+        offset: (start.getDay() + 1) % 7,          // the Persian week starts on Saturday
         toIso: function (day) {
           var g = J.toGregorian(y, m, day);
           return iso(g.gy, g.gm, g.gd);
         },
       };
     }
-    var firstG = new Date(y, m - 1, 1);
     return {
       label: GREGORIAN_MONTHS[m - 1] + " " + y,
       days: gregorianDaysInMonth(y, m),
-      offset: (firstG.getDay() + 6) % 7,
+      offset: (new Date(y, m - 1, 1).getDay() + 6) % 7,
       toIso: function (day) { return iso(y, m, day); },
     };
   }
 
+  function todayParts() {
+    var now = new Date();
+    return { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() };
+  }
+
   function nowInCalendar() {
     var g = todayParts();
-    if (isFa && J) {
-      var j = J.fromGregorian(g.y, g.m, g.d);
-      return { y: j.jy, m: j.jm, d: j.jd };
-    }
-    return g;
+    if (!useJalali) return g;
+    var j = J.fromGregorian(g.y, g.m, g.d);
+    return { y: j.jy, m: j.jm, d: j.jd };
   }
 
   function stepMonth(y, m, delta) {
@@ -120,27 +122,83 @@
     return cache[key];
   }
 
-  /* ── Month view ─────────────────────────────────────── */
+  /* ── State ──────────────────────────────────────────── */
 
-  var cursor = null;
   var els = {};
+  var cursor = null;
+  var monthItems = [];
+  // Every render takes a ticket. A response that comes back holding an old
+  // one is dropped, which is what stops a slow request for last month from
+  // painting itself over the month now on screen — and from leaving its
+  // events behind for the day sheet to find.
+  var renderToken = 0;
+
+  /* ── Year strip ─────────────────────────────────────── */
+
+  function yearBounds() {
+    var today = nowInCalendar();
+    var first = useJalali ? J.toGregorian(today.y, 1, 1) : { gy: today.y, gm: 1, gd: 1 };
+    var after = useJalali ? J.toGregorian(today.y + 1, 1, 1) : { gy: today.y + 1, gm: 1, gd: 1 };
+    var start = new Date(first.gy, first.gm - 1, first.gd);
+    var next = new Date(after.gy, after.gm - 1, after.gd);
+    // Measured, not assumed: both calendars have 365- and 366-day years, and
+    // one square too many is a square belonging to next year.
+    return { start: start, days: Math.round((next - start) / 86400000) };
+  }
+
+  async function renderStrip() {
+    var bounds = yearBounds();
+    var last = new Date(bounds.start);
+    last.setDate(last.getDate() + bounds.days - 1);
+
+    var counts = {};
+    try {
+      var data = await fetchRange(isoOf(bounds.start), isoOf(last));
+      counts = data.days || {};
+    } catch (_) {
+      return;
+    }
+
+    var todayIso = isoOf(new Date());
+    var cells = "";
+    var walk = new Date(bounds.start);
+    for (var i = 0; i < bounds.days; i++) {
+      var key = isoOf(walk);
+      cells += '<button type="button" class="px lv' + Math.min(counts[key] || 0, 4)
+        + (key === todayIso ? " is-today" : "") + '" data-iso="' + key
+        + '" aria-label="' + key + '"></button>';
+      walk.setDate(walk.getDate() + 1);
+    }
+
+    els.strip.innerHTML = cells;
+    els.strip.querySelectorAll(".px").forEach(function (cell) {
+      cell.addEventListener("click", function () { openDay(cell.dataset.iso); });
+    });
+  }
+
+  /* ── Month grid ─────────────────────────────────────── */
 
   function renderMonth() {
     var meta = monthMeta(cursor.y, cursor.m);
     var today = nowInCalendar();
-    var dow = isFa ? JALALI_DOW : GREGORIAN_DOW;
+    var onToday = cursor.y === today.y && cursor.m === today.m;
+    var dow = useJalali ? JALALI_DOW : GREGORIAN_DOW;
 
-    var html = '<div class="cal-head">'
-      + '<button type="button" class="icon-btn" data-step="-1" aria-label="Previous month">‹</button>'
-      + '<span class="cal-title">' + meta.label + "</span>"
-      + '<button type="button" class="icon-btn" data-step="1" aria-label="Next month">›</button>'
-      + "</div><div class=\"cal-dow\">";
+    var html = '<div class="year-strip" id="yearStrip" aria-hidden="true"></div>'
+      + '<div class="cal-head">'
+      + '<button type="button" class="icon-btn" data-step="-1" aria-label="' + t("Previous month") + '">‹</button>'
+      + '<span class="cal-head-mid"><span class="cal-title">' + meta.label + "</span>"
+      + '<button type="button" class="cal-today" id="calToday" aria-label="' + t("Go to today") + '"'
+      + (onToday ? " hidden" : "") + ">" + t("Today") + "</button></span>"
+      + '<button type="button" class="icon-btn" data-step="1" aria-label="' + t("Next month") + '">›</button>'
+      + '</div><div class="cal-dow">';
     dow.forEach(function (name) { html += "<span>" + name + "</span>"; });
-    html += '</div><div class="cal-grid" id="calGrid">';
+    html += '</div><div class="cal-grid">';
+
     for (var i = 0; i < meta.offset; i++) html += "<span></span>";
     for (var day = 1; day <= meta.days; day++) {
       var dayIso = meta.toIso(day);
-      var isToday = day === today.d && cursor.m === today.m && cursor.y === today.y;
+      var isToday = onToday && day === today.d;
       html += '<button type="button" class="cal-day' + (isToday ? " is-today" : "")
         + '" data-iso="' + dayIso + '"><span class="cal-num">' + num(day)
         + '</span><span class="cal-dots" data-dots="' + dayIso + '"></span></button>';
@@ -148,93 +206,51 @@
     html += "</div>";
 
     els.month.innerHTML = html;
+    els.strip = els.month.querySelector("#yearStrip");
+
     els.month.querySelectorAll("[data-step]").forEach(function (button) {
       button.addEventListener("click", function () {
         haptic("select");
-        var next = stepMonth(cursor.y, cursor.m, Number(button.dataset.step));
-        cursor = { y: next.y, m: next.m };
+        cursor = stepMonth(cursor.y, cursor.m, Number(button.dataset.step));
         renderMonth();
       });
     });
+    var todayBtn = els.month.querySelector("#calToday");
+    if (todayBtn) {
+      todayBtn.addEventListener("click", function () {
+        haptic("select");
+        cursor = nowInCalendar();
+        renderMonth();
+      });
+    }
     els.month.querySelectorAll(".cal-day").forEach(function (button) {
       button.addEventListener("click", function () { openDay(button.dataset.iso); });
     });
 
-    paintMonth(meta);
+    renderToken += 1;
+    paintMonth(meta, renderToken);
+    renderStrip();
   }
 
-  async function paintMonth(meta) {
+  async function paintMonth(meta, token) {
     var start = meta.toIso(1);
     var end = meta.toIso(meta.days);
+
+    var data;
     try {
-      var data = await fetchRange(start, end);
-      monthItems = data.items || [];
-      Object.keys(data.days || {}).forEach(function (key) {
-        var slot = els.month.querySelector('[data-dots="' + key + '"]');
-        if (!slot) return;
-        var count = Math.min(data.days[key], 3);
-        var dots = "";
-        for (var i = 0; i < count; i++) dots += "<span></span>";
-        slot.innerHTML = dots;
-      });
+      data = await fetchRange(start, end);
     } catch (_) {
-      /* A calendar without dots is still a calendar. */
+      return;                                  // a calendar without dots is still a calendar
     }
-  }
+    if (token !== renderToken) return;          // a newer month is on screen
 
-  var monthItems = [];
-
-  /* ── Year grid ──────────────────────────────────────── */
-
-  async function renderYear() {
-    var today = nowInCalendar();
-    var first = isFa && J ? J.toGregorian(today.y, 1, 1) : { gy: today.y, gm: 1, gd: 1 };
-    var after = isFa && J ? J.toGregorian(today.y + 1, 1, 1) : { gy: today.y + 1, gm: 1, gd: 1 };
-    var startDate = new Date(first.gy, first.gm - 1, first.gd);
-    // Measured, not assumed: a Jalali year is 365 or 366 days and so is a
-    // Gregorian one, and one square too many is a square from next year.
-    var days = Math.round(
-      (new Date(after.gy, after.gm - 1, after.gd) - startDate) / 86400000
-    );
-
-    var startIso = iso(startDate.getFullYear(), startDate.getMonth() + 1, startDate.getDate());
-    var endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + days - 1);
-    var endIso = iso(endDate.getFullYear(), endDate.getMonth() + 1, endDate.getDate());
-
-    var todayIso = (function () { var g = todayParts(); return iso(g.y, g.m, g.d); })();
-
-    var counts = {};
-    try {
-      // The range runs past the endpoint's item limit, so only counts come
-      // back here — which is all 371 squares can show anyway.
-      var data = await fetchRange(startIso, endIso);
-      counts = data.days || {};
-    } catch (_) {
-      els.year.innerHTML = '<p class="cal-error">' + t("Could not load the calendar.") + "</p>";
-      return;
-    }
-
-    var cells = "";
-    var walk = new Date(startDate);
-    for (var i = 0; i < days; i++) {
-      var key = iso(walk.getFullYear(), walk.getMonth() + 1, walk.getDate());
-      var level = Math.min(counts[key] || 0, 4);
-      cells += '<button type="button" class="px lv' + level
-        + (key === todayIso ? " is-today" : "")
-        + '" data-iso="' + key + '" aria-label="' + key + '"></button>';
-      walk.setDate(walk.getDate() + 1);
-    }
-
-    els.year.innerHTML = '<div class="year-head"><span class="cal-title">'
-      + (isFa ? num(nowInCalendar().y) : String(today.y)) + "</span></div>"
-      + '<div class="year-grid">' + cells + "</div>"
-      + '<div class="year-legend"><span>' + t("Less") + "</span>"
-      + '<i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i>'
-      + "<span>" + t("More") + "</span></div>";
-
-    els.year.querySelectorAll(".px").forEach(function (cell) {
-      cell.addEventListener("click", function () { openDay(cell.dataset.iso); });
+    monthItems = data.items || [];
+    Object.keys(data.days || {}).forEach(function (key) {
+      var slot = els.month.querySelector('[data-dots="' + key + '"]');
+      if (!slot) return;
+      var dots = "";
+      for (var i = 0; i < Math.min(data.days[key], 3); i++) dots += "<span></span>";
+      slot.innerHTML = dots;
     });
   }
 
@@ -273,8 +289,8 @@
 
       row.addEventListener("click", function () {
         closeSheet();
-        // Straight into the existing detail sheet, so there is exactly one
-        // place in the app that knows how to show an event.
+        // Straight into the existing detail view: exactly one place in the app
+        // knows how to show an event.
         if (window.TMApp && window.TMApp.openDetail) window.TMApp.openDetail(item.id);
       });
       els.sheetBody.appendChild(row);
@@ -314,7 +330,7 @@
     haptic("select");
     els.list.hidden = view !== "list";
     els.month.hidden = view !== "month";
-    els.year.hidden = view !== "year";
+    document.body.classList.toggle("on-calendar", view === "month");
 
     els.tabs.forEach(function (tab) {
       var active = tab.dataset.view === view;
@@ -324,20 +340,17 @@
     });
 
     if (view === "month") renderMonth();
-    if (view === "year") renderYear();
   }
 
   function init() {
     els.list = document.getElementById("eventList");
     els.month = document.getElementById("monthView");
-    els.year = document.getElementById("yearView");
     var bar = document.getElementById("tabbar");
-    if (!els.list || !els.month || !els.year || !bar || !window.TMApp) return;
+    if (!els.list || !els.month || !bar || !window.TMApp) return;
 
     els.tabs = Array.prototype.slice.call(bar.querySelectorAll(".tab"));
     els.tabs.forEach(function (tab) {
-      tab.querySelector("span").textContent = t(tab.dataset.view === "list" ? "List"
-        : tab.dataset.view === "month" ? "Month" : "Year");
+      tab.querySelector("span").textContent = t(tab.dataset.view === "list" ? "List" : "Month");
       tab.addEventListener("click", function () { show(tab.dataset.view); });
     });
 

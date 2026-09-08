@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -97,3 +97,45 @@ def test_a_broken_event_yields_nothing_instead_of_raising(bad) -> None:
 
 def test_an_inverted_range_is_empty() -> None:
     assert expand_occurrences(_event(), YEAR_END, YEAR_START) == []
+
+
+def test_a_finished_series_stops_at_its_last_occurrence() -> None:
+    """The reported bug: a weekly event kept drawing dots after it was over.
+
+    A repeat rule has no end of its own, so replaying it forward invents
+    occurrences the event will never have. notify_status "done" plus the
+    stored event_ts_utc is where the worker left the series.
+    """
+    event = _event(
+        date_iso="2026-01-05",
+        repeat="weekly",
+        notify_status="done",
+        event_ts_utc=datetime(2026, 2, 2, 8, 0, tzinfo=timezone.utc),
+    )
+
+    assert expand_occurrences(event, YEAR_START, YEAR_END) == [
+        date(2026, 1, 5), date(2026, 1, 12), date(2026, 1, 19),
+        date(2026, 1, 26), date(2026, 2, 2),
+    ]
+
+
+def test_a_running_series_is_untouched_by_that_rule() -> None:
+    event = _event(
+        date_iso="2026-01-05",
+        repeat="weekly",
+        notify_status="pending",
+        event_ts_utc=datetime(2026, 2, 2, 8, 0, tzinfo=timezone.utc),
+    )
+
+    assert len(expand_occurrences(event, YEAR_START, YEAR_END)) > 5
+
+
+def test_a_finished_series_that_ended_before_the_window_draws_nothing() -> None:
+    event = _event(
+        date_iso="2024-01-05",
+        repeat="weekly",
+        notify_status="done",
+        event_ts_utc=datetime(2024, 3, 1, 8, 0, tzinfo=timezone.utc),
+    )
+
+    assert expand_occurrences(event, YEAR_START, YEAR_END) == []
