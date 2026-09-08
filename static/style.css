@@ -1347,3 +1347,53 @@ a { color: var(--link); }
 @media (prefers-reduced-motion: reduce) {
   .event-card.tone-today .urgency-badge { animation: none; }
 }
+
+/* ── Batch 13a-2 — swipe actions ─────────────────────── */
+
+.event-row {
+  position: relative;
+  border-radius: var(--r-lg);
+}
+
+/* Matching the card's radius exactly is what stops the coloured strips from
+   peeking out at the rounded corners while the row is closed. */
+.event-row .event-card {
+  position: relative;
+  z-index: 1;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+.event-actions {
+  position: absolute;
+  inset-block: 0;
+  z-index: 0;
+  display: flex;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.event-actions-start { inset-inline-start: 0; }
+.event-actions-end   { inset-inline-end: 0; }
+
+.row-action {
+  width: 84px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  border: none; cursor: pointer;
+  color: #fff;
+  font-size: 0.72rem; font-weight: 800;
+  font-family: inherit;
+}
+.row-action-pin    { background: linear-gradient(160deg, #ec4899, #be185d); }
+.row-action-delete { background: linear-gradient(160deg, #f87171, #dc2626); }
+.row-action:active { filter: brightness(0.92); }
+.row-action:focus-visible { outline: 3px solid var(--brand); outline-offset: -3px; }
+.row-action svg { opacity: 0.95; }
+
+/* Once a row is open the card is the only thing standing between a stray tap
+   and a delete, so it stops behaving like a link. */
+.event-row.is-open .event-card { cursor: default; }
+
+@media (prefers-reduced-motion: reduce) {
+  .event-row .event-card { will-change: auto; }
+}
