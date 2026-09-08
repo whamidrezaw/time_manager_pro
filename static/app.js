@@ -600,8 +600,11 @@
   async function loadEvents(append = false) {
     if (!append) {
       state.skip = 0;
-      setSkeleton(true);
-      if (els.eventsWrap) els.eventsWrap.innerHTML = "";
+
+      // The skeleton only stands in for an empty list. Clearing the cards
+      // before the response arrives threw away the very nodes the reconciler
+      // animates from, and made every filter change flash empty on the way.
+      setSkeleton(!els.eventsWrap || !els.eventsWrap.children.length);
       if (els.listState) els.listState.hidden = true;
       if (els.listErrorState) els.listErrorState.hidden = true;
       if (els.noResultsState) els.noResultsState.hidden = true;
@@ -634,7 +637,7 @@
     } catch (error) {
       state.events = [];
       state.filteredEvents = [];
-      if (els.eventsWrap) els.eventsWrap.innerHTML = "";
+      clearCards();
       if (els.listState) els.listState.hidden = true;
       if (els.listErrorState) els.listErrorState.hidden = false;
       showToast(normalizeError(error), "error");
@@ -761,7 +764,11 @@
     const shortText = t("{parts} left",       { parts: shortParts.join(" ") });
 
     let tone = "long";
-    if      (diff.totalDays <= 3)   tone = "critical";
+    // Tomorrow is its own tone rather than the top of the critical bucket: the
+    // list groups by it and it has to read louder than "in a week". The old
+    // <=3 and <=7 branches both returned "critical", so the second could never
+    // be reached — they are one branch now.
+    if      (diff.totalDays === 1)  tone = "tomorrow";
     else if (diff.totalDays <= 7)   tone = "critical";
     else if (diff.totalDays <= 30)  tone = "soon";
     else if (diff.totalDays <= 90)  tone = "warm";
@@ -772,86 +779,264 @@
   }
 
   /* ── Render Events ───────────────────────────────────── */
+  // Reconciled against the DOM by id rather than rebuilt. The old version
+  // emptied the wrapper and recreated every article on each render, which
+  // dropped keyboard focus, re-bound every listener, and — worst of all — left
+  // the browser with no way to know that a card had moved rather than been
+  // replaced. Nothing could be animated because nothing survived.
+
+  const cardIndex = new Map();      // event id -> <article>
+  const headerIndex = new Map();    // section key -> <div>
+
+  const SECTION_LABELS = {
+    pinned: "Pinned",
+    today: "Today",
+    tomorrow: "Tomorrow",
+    later: "Later",
+  };
+
+  const CARD_ICONS = {
+    pin: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  };
+
+  function prefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  }
+
+  function clearCards() {
+    if (els.eventsWrap) els.eventsWrap.replaceChildren();
+    cardIndex.clear();
+    headerIndex.clear();
+  }
+
+  // Pinned events are sorted first by the server, so that block is always
+  // contiguous and a single header can cover it. Checking pinned before the
+  // day is what keeps the two schemes from fighting.
+  function sectionFor(event, cd) {
+    if (event.pinned) return "pinned";
+    if (cd.totalDays === 0) return "today";
+    if (cd.totalDays === 1) return "tomorrow";
+    return "later";
+  }
+
+  function sectionHeader(key) {
+    let node = headerIndex.get(key);
+    if (node) return node;
+
+    node = document.createElement("div");
+    node.className = `event-section section-${key}`;
+    node.setAttribute("role", "presentation");
+    node.innerHTML = '<span class="event-section-label"></span>';
+    node.firstChild.textContent = t(SECTION_LABELS[key] || key);
+    headerIndex.set(key, node);
+    return node;
+  }
+
+  // Mirrors the logic openEditComposer uses for the reminder field, so the
+  // time on the card and the time in the form can never disagree.
+  function reminderTimeText(event) {
+    const spec = (Array.isArray(event.reminders) && event.reminders[0]) || null;
+    if (spec && spec.mode === "relative") return null;
+    const h = String(spec?.mode === "absolute" ? spec.hour   : (event.reminder_hour   ?? 9));
+    const m = String(spec?.mode === "absolute" ? spec.minute : (event.reminder_minute ?? 0));
+    return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+  }
+
+  function buildCard(id) {
+    const art = document.createElement("article");
+    art.className = "event-card";
+    art.tabIndex = 0;
+    art.setAttribute("role", "button");
+    art.dataset.id = id;
+    art.innerHTML = `
+      <div class="event-card-top">
+        <div class="event-head">
+          <h3 class="event-title" data-f="title"></h3>
+          <div class="event-badges">
+            <span class="badge badge-pin" data-f="pin" hidden>${CARD_ICONS.pin}<span data-f="pinText"></span></span>
+            <span class="badge" data-f="cat"></span>
+            <span class="urgency-badge" data-f="urgency"></span>
+          </div>
+        </div>
+        <span class="event-repeat" data-f="repeat"></span>
+      </div>
+
+      <div class="event-progress-wrap">
+        <div class="event-progress-bar">
+          <div class="event-progress-fill" data-f="fill"></div>
+        </div>
+        <span class="event-progress-label" data-f="progress"></span>
+      </div>
+
+      <div class="event-dates">
+        <span class="event-date-item">${CARD_ICONS.calendar}<span data-f="iso"></span></span>
+        <span class="event-dates-sep">•</span>
+        <span class="event-date-item">${CARD_ICONS.moon}<span data-f="jalali"></span></span>
+        <span class="event-date-item event-reminder" data-f="reminderWrap" hidden>${CARD_ICONS.bell}<span data-f="reminder"></span></span>
+      </div>
+
+      <div class="event-bottom">
+        <span class="status-dot" data-f="dot"></span>
+        <span data-f="status"></span>
+      </div>
+    `;
+
+    const fields = {};
+    art.querySelectorAll("[data-f]").forEach((el) => { fields[el.dataset.f] = el; });
+    art._f = fields;
+
+    // Reading the id off the element at call time rather than closing over it
+    // means a reused node can never open the wrong event.
+    const open = () => openDetail(art.dataset.id);
+    art.addEventListener("click", open);
+    art.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+    });
+
+    return art;
+  }
+
+  function fillCard(art, event, cd) {
+    const f = art._f;
+    const catLabel = CATEGORY_LABELS[event.category] || "🌐 General";
+
+    art.className = `event-card cat-${event.category || "general"} tone-${cd.tone}`;
+    art.setAttribute("aria-label", t("Open details for {title}", { title: event.title }));
+
+    f.title.textContent = event.title || "";
+    f.pin.hidden = !event.pinned;
+    f.pinText.textContent = t("Pinned");
+    f.cat.className = `badge ${getCatBadgeClass(event.category)}`;
+    f.cat.textContent = catLabel;
+    f.urgency.className = `urgency-badge urgency-${cd.tone}`;
+    f.urgency.textContent = cd.shortText;
+    f.repeat.textContent = t(REPEAT_LABELS[event.repeat] || "One time");
+
+    const pct = cd.totalDays <= 0
+      ? 100
+      : Math.max(5, Math.min(100, Math.round((1 - cd.totalDays / 365) * 100)));
+    f.fill.style.width = `${pct}%`;
+    f.progress.textContent = cd.totalDays <= 0 ? t("Today!") : `${cd.totalDays}d`;
+
+    const iso = event.next_date_iso || event.date_iso || "—";
+    f.iso.textContent = event.all_day === false && event.time_hm
+      ? `${iso} · ${event.time_hm}`
+      : iso;
+    f.jalali.textContent = event.next_date_jalali || event.date_jalali || "—";
+
+    const reminder = reminderTimeText(event);
+    f.reminderWrap.hidden = !reminder;
+    if (reminder) f.reminder.textContent = reminder;
+
+    const status = event.notify_status || "pending";
+    f.dot.className = `status-dot status-${status}`;
+    f.status.textContent = t(STATUS_LABELS[status] || "Pending");
+  }
+
   function renderEvents() {
     if (!els.eventsWrap) return;
 
+    const wrap = els.eventsWrap;
     if (!state.filteredEvents.length) {
-      els.eventsWrap.innerHTML = "";
+      clearCards();
       showStatePanel();
       return;
     }
 
-    const frag = document.createDocumentFragment();
+    const animate = !prefersReducedMotion();
+    const before = animate ? snapshotTops(wrap) : null;
+
+    const desired = [];
+    const live = new Set();
+    const fresh = [];
+    let section = null;
 
     state.filteredEvents.forEach((event) => {
       const cd = getCountdownData(event.next_date_iso || event.date_iso);
-      const catClass = `cat-${event.category || "general"}`;
-      const catLabel = CATEGORY_LABELS[event.category] || "🌐 General";
-      const repeatLabel = REPEAT_LABELS[event.repeat] || "One time";
+      const key = sectionFor(event, cd);
+      if (key !== section) {
+        section = key;
+        desired.push(sectionHeader(key));
+      }
 
-      const art = document.createElement("article");
-      art.className = `event-card ${catClass}`;
-      art.tabIndex = 0;
-      art.setAttribute("role", "button");
-      art.setAttribute("aria-label", `Open details for ${event.title}`);
-      art.dataset.id = event.id;
-
-      // Progress bar: how close to event (cap at 365 days)
-      const progressPct = cd.totalDays <= 0
-        ? 100
-        : Math.max(5, Math.min(100, Math.round((1 - cd.totalDays / 365) * 100)));
-
-      art.innerHTML = `
-        <div class="event-card-top">
-          <div class="event-head">
-            <h3 class="event-title">${escapeHtml(event.title)}</h3>
-            <div class="event-badges">
-              ${event.pinned ? '<span class="badge badge-pin">📌 Pinned</span>' : ""}
-              <span class="badge ${getCatBadgeClass(event.category)}">${escapeHtml(catLabel)}</span>
-              <span class="urgency-badge urgency-${cd.tone}">${escapeHtml(cd.shortText)}</span>
-            </div>
-          </div>
-          <span class="event-repeat">${escapeHtml(repeatLabel)}</span>
-        </div>
-
-        <div class="event-progress-wrap">
-          <div class="event-progress-bar">
-            <div class="event-progress-fill" style="width:${progressPct}%"></div>
-          </div>
-          <span class="event-progress-label">${
-            cd.totalDays <= 0 ? "Today!" :
-            cd.totalDays === 0 ? "Today!" :
-            `${cd.totalDays}d`
-          }</span>
-        </div>
-
-        <div class="event-dates">
-          <span>📅 ${escapeHtml(event.next_date_iso || event.date_iso || "—")}${
-            event.all_day === false && event.time_hm
-              ? ` · ${escapeHtml(event.time_hm)}`
-              : ""
-          }</span>
-          <span class="event-dates-sep">•</span>
-          <span>🗓️ ${escapeHtml(event.next_date_jalali || event.date_jalali || "—")}</span>
-        </div>
-
-        <div class="event-bottom">
-          <span class="status-dot status-${escapeHtml(event.notify_status || "pending")}"></span>
-          <span>${escapeHtml(t(STATUS_LABELS[event.notify_status] || "Pending"))}</span>
-        </div>
-      `;
-
-      art.addEventListener("click",   () => openDetail(event.id));
-      art.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(event.id); }
-      });
-
-      frag.appendChild(art);
+      let art = cardIndex.get(event.id);
+      if (!art) {
+        art = buildCard(event.id);
+        cardIndex.set(event.id, art);
+        fresh.push(art);
+      }
+      fillCard(art, event, cd);
+      live.add(event.id);
+      desired.push(art);
     });
 
-    els.eventsWrap.innerHTML = "";
-    els.eventsWrap.appendChild(frag);
+    cardIndex.forEach((art, id) => {
+      if (!live.has(id)) {
+        art.remove();
+        cardIndex.delete(id);
+      }
+    });
+
+    const wanted = new Set(desired);
+    Array.from(wrap.children).forEach((node) => {
+      if (!wanted.has(node)) node.remove();
+    });
+    desired.forEach((node, i) => {
+      if (wrap.children[i] !== node) wrap.insertBefore(node, wrap.children[i] || null);
+    });
+
+    if (animate) {
+      flipFrom(before, wrap);
+      playEntries(fresh);
+    }
     showStatePanel();
+  }
+
+  /* ── Movement ────────────────────────────────────────
+     FLIP: measure where everything was, let the reordering happen, measure
+     again, then animate the difference away. Only the vertical offset matters
+     in a single column, so one number per node is enough. */
+
+  function snapshotTops(wrap) {
+    const tops = new Map();
+    Array.from(wrap.children).forEach((node) => {
+      tops.set(node, node.getBoundingClientRect().top);
+    });
+    return tops;
+  }
+
+  function flipFrom(before, wrap) {
+    if (!before) return;
+    Array.from(wrap.children).forEach((node) => {
+      const was = before.get(node);
+      if (was === undefined) return;                 // new — gets the entry animation
+      const delta = was - node.getBoundingClientRect().top;
+      if (Math.abs(delta) < 1) return;
+      node.animate(
+        [{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }],
+        { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+      );
+    });
+  }
+
+  function playEntries(nodes) {
+    nodes.forEach((node, i) => {
+      node.animate(
+        [
+          { opacity: 0, transform: "translateY(10px) scale(0.98)" },
+          { opacity: 1, transform: "none" },
+        ],
+        {
+          duration: 260,
+          delay: Math.min(i * 40, 240),
+          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+          fill: "backwards",
+        }
+      );
+    });
   }
 
   function getCatBadgeClass(cat) {
@@ -1174,6 +1359,7 @@
 
   /* ── Pin ─────────────────────────────────────────────── */
   async function toggleCurrentPin() {
+    try { tg?.HapticFeedback?.impactOccurred?.("light"); } catch (_) {}
     const ev = getEventById(state.detailEventId);
     if (!ev) return;
 
@@ -1599,8 +1785,20 @@
       .map((value, i) => `<div class="dp-item" role="option" data-value="${value}"` +
                          ` aria-selected="${value === selected}">${escapeHtml(labels[i])}</div>`)
       .join("");
-    const index = Math.max(0, values.indexOf(selected));
-    el.scrollTop = index * DP_ITEM_H;
+    dpScrollTo(el, Math.max(0, values.indexOf(selected)));
+  }
+
+  function dpScrollTo(el, index) {
+    const top = index * DP_ITEM_H;
+    el.scrollTop = top;
+
+    // scroll-snap-type is mandatory on these columns, and the snap re-runs on
+    // the layout that follows a rebuild — often dragging the column back to
+    // the nearest snap point. Re-asserting on the next frame makes the
+    // intended item stick.
+    requestAnimationFrame(() => {
+      if (Math.abs(el.scrollTop - top) > 1) el.scrollTop = top;
+    });
   }
 
   function dpRender(scope = "all") {
@@ -1675,12 +1873,17 @@
     });
     if (els.dpClear) els.dpClear.hidden = !allowClear;
 
-    dpRender();
     state.lastFocusedElement = document.activeElement;
+
+    // Order matters here, and getting it wrong is what made the picker open on
+    // 1900 / January / 1. While the overlay is hidden the wheels have no
+    // scroll box, so the scrollTop that centres today was silently dropped and
+    // every column stayed parked on its first item. Show first, fill second.
     if (els.dpOverlay) {
       els.dpOverlay.hidden = false;
       els.dpOverlay.setAttribute("aria-hidden", "false");
     }
+    dpRender();
     setTimeout(() => els.dpConfirm?.focus?.(), 40);
   }
 

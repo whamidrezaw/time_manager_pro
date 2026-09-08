@@ -1279,3 +1279,71 @@ a { color: var(--link); }
 @media (prefers-reduced-motion: reduce) {
   .shr-overlay, .shr-dialog, .shr-knob, .shr-skeleton { transition: none; animation: none; }
 }
+
+/* ── Batch 13a-1 — section headers, urgency, card icons ──
+   The list is now reconciled by id, so these elements persist across renders
+   and the FLIP animation in app.js has something stable to move. */
+
+.event-section {
+  position: sticky; top: 64px; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  margin: 6px 0 -2px;
+  padding: 6px 2px;
+  background: linear-gradient(var(--bg) 60%, transparent);
+}
+.event-section::after {
+  content: ''; flex: 1; height: 1px;
+  background: var(--border);
+}
+.event-section-label {
+  font-size: 0.78rem; font-weight: 800;
+  letter-spacing: 0.02em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.section-pinned   .event-section-label { color: #be185d; }
+.section-today    .event-section-label { color: var(--tone-today); }
+.section-tomorrow .event-section-label { color: var(--tone-critical); }
+
+/* Tomorrow sits between today and the critical bucket: same family as
+   critical, turned up, so the two never read as the same distance away. */
+.urgency-tomorrow { background: rgba(234,88,12,0.22); color: var(--tone-critical); }
+
+/* Today and tomorrow have to shout without turning the list into a wall of
+   colour, so the shouting is done by the rail and a tint rather than by
+   flooding the card. */
+.event-card.tone-today,
+.event-card.tone-tomorrow {
+  border-inline-start-width: 8px;
+  box-shadow: var(--shadow-card), 0 6px 20px rgba(190, 24, 93, 0.14);
+}
+.event-card.tone-today {
+  border-inline-start-color: var(--tone-today);
+  background:
+    linear-gradient(100deg, rgba(190,24,93,0.09), rgba(190,24,93,0) 60%),
+    var(--surface);
+}
+.event-card.tone-tomorrow {
+  border-inline-start-color: var(--tone-critical);
+  background:
+    linear-gradient(100deg, rgba(234,88,12,0.07), rgba(234,88,12,0) 60%),
+    var(--surface);
+}
+.event-card.tone-today .event-title { font-weight: 800; }
+.event-card.tone-today .urgency-badge { animation: urgency-pulse 2.4s ease-in-out infinite; }
+
+@keyframes urgency-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+/* Icons are inline SVG now. Emoji rendered differently on every platform,
+   could not take the surrounding colour, and screen readers read their names
+   out loud in the middle of a date. */
+.event-date-item { display: inline-flex; align-items: center; gap: 5px; }
+.event-date-item svg { flex-shrink: 0; opacity: 0.75; }
+.event-reminder { color: var(--text-muted); }
+.badge-pin { display: inline-flex; align-items: center; gap: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .event-card.tone-today .urgency-badge { animation: none; }
+}
