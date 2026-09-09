@@ -126,6 +126,20 @@
 
   async function init() {
     var param = String((tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || "");
+
+    // The fourth kind of deep link in this app, and the only one that does its
+    // work without asking: linking a chat you are already in adds nothing to
+    // your calendar, it only tells the app where you are allowed to send.
+    if (param.toLowerCase().indexOf("g_") === 0) {
+      try {
+        var linked = await api("/api/chats/link", { token: param.slice(2) });
+        if (linked.success && window.TMApp && window.TMApp.reload) {
+          window.TMApp.reload();
+        }
+      } catch (_) {}
+      return;
+    }
+
     if (param.toLowerCase().indexOf("s_") !== 0) return;
 
     var token = param.slice(2);

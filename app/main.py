@@ -17,6 +17,7 @@ from app.db import (
     stop_expiring_one_off_events,
 )
 from app.routes.calendar import router as calendar_router
+from app.routes.chats import router as chats_router
 from app.routes.events import router as events_router
 from app.routes.health import router as health_router
 from app.routes.referral import router as referral_router
@@ -88,6 +89,7 @@ app.include_router(health_router)
 app.include_router(web_router)
 app.include_router(events_router)
 app.include_router(calendar_router)
+app.include_router(chats_router)
 app.include_router(referral_router)
 app.include_router(share_router)
 app.include_router(sharegroup_router)

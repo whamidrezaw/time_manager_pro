@@ -175,6 +175,29 @@ async def process_due_reminders(
                 reply_markup=build_reminder_keyboard(evt, settings),
             )
 
+            # The group copy comes second and in its own try: the personal
+            # reminder has already been delivered, and a bot that was removed
+            # from a group must not cost the owner their own reminder or stop
+            # the series being rescheduled below.
+            target = evt.get("target_chat_id")
+            if target:
+                try:
+                    await bot.send_message(
+                        chat_id=int(target),
+                        text=build_reminder_text(evt),
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    logger.warning(
+                        "group reminder failed chat=%s event=%s", target, evt["_id"]
+                    )
+                    try:
+                        from app.services.chats import deactivate_chat
+
+                        await deactivate_chat(int(target))
+                    except Exception:
+                        logger.exception("could not deactivate chat %s", target)
+
             repeat = evt.get("repeat", "none")
             tz, _ = safe_zoneinfo(evt.get("tz_name", "UTC"))
             occurrence = evt.get("event_ts_utc", now)

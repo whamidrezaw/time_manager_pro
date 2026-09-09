@@ -96,3 +96,28 @@ async def get_first_name(user_id: str, settings: Settings | None = None) -> str:
     if not body.get("ok"):
         return ""
     return str(body["result"].get("first_name") or "")
+
+
+async def get_chat_member_status(chat_id: int, user_id: str,
+                                 settings: Settings | None = None) -> str:
+    """Whether this person is actually in that chat.
+
+    Asked live rather than remembered: membership changes without telling us,
+    and a stale "yes" here is somebody posting into a group they left.
+    """
+    settings = settings or get_settings()
+    url = f"https://api.telegram.org/bot{settings.bot_token}/getChatMember"
+
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            response = await client.post(
+                url, json={"chat_id": chat_id, "user_id": int(user_id)}
+            )
+        body = response.json()
+    except Exception:
+        logger.warning("getChatMember failed chat=%s user=%s", chat_id, user_id)
+        return ""
+
+    if not body.get("ok"):
+        return ""
+    return str(body["result"].get("status") or "")

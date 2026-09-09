@@ -61,6 +61,9 @@ class EventBaseRequest(InitDataPayload):
     # Deliberately separate from `repeat`: one answers "does this happen
     # again", the other "how often should I hear about it until it does".
     lead_repeat: Literal["none", "daily", "weekly", "monthly"] = "none"
+    # A group or channel the reminder also goes to. Validated against the
+    # user's own destinations on save, never trusted as sent.
+    target_chat_id: str | None = Field(default=None, max_length=32)
     category: CategoryType = "general"
     note: str = Field(default="", max_length=2000)
     pinned: bool = False

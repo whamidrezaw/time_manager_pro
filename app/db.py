@@ -34,6 +34,11 @@ def get_events_collection() -> AsyncIOMotorCollection:
     return get_database()["events"]
 
 
+def get_chats_collection() -> AsyncIOMotorCollection:
+    """Groups and channels the bot has been added to."""
+    return get_database()["chats"]
+
+
 def get_users_collection() -> AsyncIOMotorCollection:
     return get_database()["users"]
 
@@ -91,6 +96,12 @@ async def ensure_indexes(settings: Settings | None = None) -> None:
     # key every propagation and cascade walks.
     await events.create_index("share_token", unique=True, sparse=True)
     await events.create_index("share_id", sparse=True)
+
+    # Batch 14. link_token is what a group member taps to add the chat
+    # to their own destinations, so it has to resolve to exactly one.
+    chats = get_chats_collection()
+    await chats.create_index("link_token", unique=True, sparse=True)
+    await chats.create_index("members")
 
     users = get_users_collection()
 

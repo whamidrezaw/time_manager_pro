@@ -86,6 +86,20 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "share_button": {"en": "Open in TimeManager", "fa": "باز کردن در تایم‌منیجر"},
     "share_open_button": {"en": "Open in Telegram", "fa": "باز کردن در تلگرام"},
+    "chat_connected": {
+        "en": (
+            "✅ <b>{title}</b> is connected.\n\n"
+            "When you create an event you can now send its reminder there as "
+            "well as here. Anyone else in that chat can add it to their own "
+            "list with this link:\n{link}"
+        ),
+        "fa": (
+            "✅ <b>{title}</b> وصل شد.\n\n"
+            "از این به بعد موقع ساخت رویداد می‌توانی یادآوری‌اش را علاوه بر "
+            "اینجا، آنجا هم بفرستی. هر کس دیگری در آن چت با این لینک می‌تواند "
+            "به فهرست خودش اضافه‌اش کند:\n{link}"
+        ),
+    },
     "share_join_button": {
         "en": "Add to my events",
         "fa": "به رویدادهای من اضافه کن",

@@ -40,6 +40,9 @@ class EventOut(APIModel):
     # None for an ordinary event, "owner" or "member" for a shared one.
     share_role: str | None = None
     checklist: list[ChecklistItem] = Field(default_factory=list)
+    target_chat_id: str | None = None
+    target_chat_title: str = ""
+    scope: str = "private"
 
 
 class ListEventsResponse(SuccessResponse):

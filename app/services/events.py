@@ -22,6 +22,7 @@ from app.schemas.requests import (
     SaveNoteRequest,
 )
 from app.schemas.responses import EventOut
+from app.services.chats import scope_for, usable_destination
 from app.utils.dates import (
     build_lead_reminders,
     expire_for_repeat,
@@ -96,6 +97,9 @@ def serialize_event(doc: dict) -> EventOut:
         share_role=doc.get("share_role"),
         # Personal, exactly like the note: a shared birthday does not carry
         # one person's shopping list onto everyone else's copy.
+        target_chat_id=doc.get("target_chat_id"),
+        target_chat_title=doc.get("target_chat_title", ""),
+        scope=doc.get("scope", "private"),
         checklist=[
             item for item in (doc.get("checklist") or [])
             if isinstance(item, dict) and str(item.get("text", "")).strip()
@@ -295,6 +299,13 @@ async def add_event_for_user(
         raise HTTPException(status_code=400, detail="EVENT_LIMIT_REACHED")
 
     event_data = _normalize_event_input(payload, settings)
+
+    # Resolved against what this user is actually allowed to post to. A chat
+    # id arriving in a request means nothing on its own.
+    target = await usable_destination(user_id, getattr(payload, "target_chat_id", None))
+    event_data["target_chat_id"] = str(target["_id"]) if target else None
+    event_data["target_chat_title"] = target.get("title", "") if target else ""
+    event_data["scope"] = scope_for(target.get("type")) if target else "private"
     now = datetime.now(timezone.utc)
     event_data.update({"user_id": user_id, "created_at": now, "updated_at": now})
 
@@ -340,6 +351,13 @@ async def edit_event_for_user(
         raise HTTPException(status_code=404, detail="NOT_FOUND_OR_UNAUTHORIZED")
 
     event_data = _normalize_event_input(payload, settings)
+
+    # Resolved against what this user is actually allowed to post to. A chat
+    # id arriving in a request means nothing on its own.
+    target = await usable_destination(user_id, getattr(payload, "target_chat_id", None))
+    event_data["target_chat_id"] = str(target["_id"]) if target else None
+    event_data["target_chat_title"] = target.get("title", "") if target else ""
+    event_data["scope"] = scope_for(target.get("type")) if target else "private"
     event_data["updated_at"] = datetime.now(timezone.utc)
 
     # A member may keep their own note, reminder and pin, but the shared

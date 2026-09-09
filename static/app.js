@@ -357,6 +357,9 @@
       "monthly until then": "ماهانه تا آن روز",
       "Note": "یادداشت",
       "Checklist": "چک‌لیست",
+      "Also send it to": "علاوه بر این، بفرست به",
+      "Only me": "فقط خودم",
+      "Everyone in that chat will see the event title.": "همهٔ اعضای آن چت عنوان رویداد را می‌بینند.",
       "Add an item": "افزودن مورد",
       "Remove item": "حذف مورد",
       "That is as long as a checklist gets.": "چک‌لیست از این بلندتر نمی‌شود.",
@@ -1369,6 +1372,7 @@
     if (els.repeatUntil)  els.repeatUntil.value  = event.repeat_until || "";
     const leadSelect = document.getElementById("leadRepeat");
     if (leadSelect) leadSelect.value = event.lead_repeat || "none";
+    setDestination(event.target_chat_id);
 
     // On a shared copy the creator owns what the event is and when it is. The
     // server drops those fields on save anyway; disabling them here is what
@@ -1495,6 +1499,7 @@
       reminder_minute: Number(timeM ?? 0),
       repeat_until: (els.repeat?.value !== "none" && els.repeatUntil?.value) || null,
       lead_repeat: document.getElementById("leadRepeat")?.value || "none",
+      target_chat_id: document.getElementById("targetChat")?.value || null,
     };
 
     if (!payload.title) {
@@ -2213,6 +2218,50 @@
     });
   }
 
+  /* ── Reminder destinations ───────────────────────────
+     Groups and channels the bot has been added to, filtered server-side to
+     the ones this person is actually in. The picker stays hidden until there
+     is at least one, so nobody meets an empty dropdown asking a question they
+     have no answer to. */
+
+  let destinations = [];
+
+  async function loadDestinations() {
+    try {
+      const data = await apiPost("/api/chats", {});
+      destinations = Array.isArray(data.chats) ? data.chats : [];
+    } catch (_) {
+      destinations = [];
+    }
+
+    const wrap = document.getElementById("targetChatWrap");
+    const select = document.getElementById("targetChat");
+    if (!wrap || !select) return;
+
+    const keep = select.value;
+    select.replaceChildren();
+
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = t("Only me");
+    select.appendChild(none);
+
+    destinations.forEach((chat) => {
+      const option = document.createElement("option");
+      option.value = chat.id;
+      option.textContent = chat.title || chat.id;
+      select.appendChild(option);
+    });
+
+    select.value = keep;
+    wrap.hidden = destinations.length === 0;
+  }
+
+  function setDestination(value) {
+    const select = document.getElementById("targetChat");
+    if (select) select.value = value || "";
+  }
+
   /* ── Checklist ───────────────────────────────────────
      Its own field on the event rather than lines inside the note. A checkbox
      parsed back out of free text breaks the first time somebody edits the
@@ -2351,6 +2400,7 @@
   bindEvents();
   bindDatePicker();
   bindChecklist();
+  loadDestinations();
   loadEvents();
   showOnboardingIfNeeded();
 })();

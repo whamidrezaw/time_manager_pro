@@ -39,7 +39,9 @@ async def telegram_webhook(
 
     # A live, initialized Bot is only needed for the actual API call, so it
     # stays scoped to the branches that really talk to Telegram.
-    if update.callback_query:
+    if update.my_chat_member:
+        await _handle_membership(update, settings)
+    elif update.callback_query:
         async with Bot(token=settings.bot_token) as bot:
             await _handle_callback_query(update, bot)
     elif update.message:
@@ -160,3 +162,56 @@ async def _attach_referral_from_start(message) -> None:
             await attach_referrer(str(message.from_user.id), normalized)
     except Exception:
         logger.exception("referral attach failed chat_id=%s", message.chat_id)
+
+
+async def _handle_membership(update, settings) -> None:
+    """The bot was added to or removed from a group or channel.
+
+    Telegram sends this as my_chat_member, which the webhook ignored until
+    now — it only ever looked at messages. Registering the chat here is what
+    makes it appear as a destination without anyone typing a command.
+    """
+    change = update.my_chat_member
+    chat = change.chat
+    status = change.new_chat_member.status
+
+    try:
+        from app.services.chats import (
+            ACTIVE_STATUSES,
+            ALLOWED_TYPES,
+            chat_link,
+            deactivate_chat,
+            register_chat,
+        )
+        from app.utils.i18n import resolve_language, t
+
+        if chat.type not in ALLOWED_TYPES:
+            return
+
+        if status not in ACTIVE_STATUSES:
+            await deactivate_chat(chat.id)
+            return
+
+        added_by = str(change.from_user.id) if change.from_user else None
+        record = await register_chat(chat.id, chat.type, chat.title or "", added_by)
+        if not record or not added_by:
+            return
+
+        # Told in private, not in the group: the person who added the bot is
+        # the one who needs to know what to do next, and a group does not need
+        # a setup message from a bot it just met.
+        language = resolve_language(
+            getattr(change.from_user, "language_code", None) if change.from_user else None
+        )
+        async with Bot(token=settings.bot_token) as bot:
+            await bot.send_message(
+                chat_id=added_by,
+                text=t("chat_connected", language).format(
+                    title=chat.title or "",
+                    link=chat_link(record["link_token"], settings),
+                ),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+    except Exception:
+        logger.exception("membership update failed chat_id=%s", getattr(chat, "id", "?"))
