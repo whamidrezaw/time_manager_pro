@@ -17,9 +17,49 @@ converting them in your head or keeping two lists. TimeManager Pro stores one
 event and shows you both dates, then reaches you where you already are: in
 Telegram, with no extra app to install and no account to create.
 
+## Keeping reminders punctual
+
+The reminder worker has two triggers. The GitHub Actions schedule is the
+fallback; **it is not punctual** — GitHub delays scheduled workflows under
+load and drops them outright, which shows up as reminders arriving anywhere
+from ten minutes to several hours late.
+
+For reminders that arrive on the minute, point any external cron at the app
+once a minute:
+
+```
+POST https://<your host>/tasks/run-reminders
+Header: X-Tasks-Secret: <TASKS_SECRET>
+```
+
+Both triggers can run together. Each event is claimed with an atomic status
+change before anything is sent, so whichever arrives second finds nothing to
+do. A second job, once a day, sends you a summary:
+
+```
+POST https://<your host>/tasks/health
+```
+
+It reports how many reminders are overdue and how late the worst one is —
+lateness, not errors, because a worker that never runs raises nothing.
+
 ## Features
 
 - **Dual calendar.** Every event carries both its Gregorian and its Jalali date.
+- **Reminders that lead up to the event.** Set an event two months out and be
+  nudged daily, weekly or monthly until the day arrives — then the series stops.
+- **Month view and a year grid.** The month grid marks today by shape as well as
+  colour; the strip above it shows the whole year by event density.
+- **Shared events.** Link one event across several people. Each keeps their own
+  copy, so each keeps their own timezone, reminder time, note and checklist,
+  while the title and the date stay in step.
+- **Group and channel reminders.** Add the bot to a group or channel and a
+  reminder goes there as well as to you.
+- **Share cards.** A rendered image of any event, with a public countdown page
+  behind it, so a shared link previews as the event rather than as a bot.
+- **A checklist on every event**, beside the note.
+- **Invites that raise your limit.** Every three friends who join and save their
+  first event add twenty events to your allowance.
 - **Reminders in Telegram.** A message arrives at the hour and minute you chose,
   in your own timezone, with a *Snooze 1h* button and a deep link back to the event.
 - **Recurring events.** Daily, weekly, monthly and yearly, with an optional end
@@ -121,6 +161,9 @@ list with comments.
 | `MAX_EVENTS_PER_USER`, `MAX_TITLE_LEN`, `MAX_NOTE_LEN` | Per-user limits (`MAX_EVENTS_PER_USER` is the hard ceiling) |
 | `EVENT_LIMIT_BASE`, `REFERRAL_STEP`, `REFERRAL_BONUS` | Referral reward: start at 20 events, +20 per 3 valid invites |
 | `WEBAPP_BASE_URL` | Also the origin of public countdown links (`/c/<token>`) and share cards |
+| `TASKS_SECRET` | Shared secret for `POST /tasks/run-reminders`; empty keeps the endpoint closed |
+| `ADMIN_CHAT_ID` | Your Telegram user id — where the health report is sent |
+| `OVERDUE_AFTER_MINUTES` | How late a pending reminder may be before it is reported |
 | `REMINDER_POLL_INTERVAL_SECS`, `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Worker tuning |
 
 ## Tests

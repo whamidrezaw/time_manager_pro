@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     reminder_batch_size: int = Field(default=200, alias="REMINDER_BATCH_SIZE")
     stale_processing_secs: int = Field(default=300, alias="STALE_PROCESSING_SECS")
     reminder_poll_interval_secs: int = Field(default=30, alias="REMINDER_POLL_INTERVAL_SECS")
+
+    # Batch 18. The shared secret an external cron sends to trigger a run.
+    # Empty means the endpoint stays closed, so a fresh deployment cannot be
+    # poked by anyone who guesses the path.
+    tasks_secret: str = Field(default="", alias="TASKS_SECRET")
+    # Where the health report goes. Your own Telegram user id.
+    admin_chat_id: str = Field(default="", alias="ADMIN_CHAT_ID")
+    # How late a pending reminder has to be before it counts as overdue.
+    overdue_after_minutes: int = Field(default=10, alias="OVERDUE_AFTER_MINUTES")
     default_reminder_hour: int = Field(default=9, alias="DEFAULT_REMINDER_HOUR")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
