@@ -7,6 +7,7 @@ from pydantic import Field, field_validator
 
 from app.schemas.common import (
     MAX_REMINDERS_PER_EVENT,
+    ChecklistItem,
     EventIdPayload,
     InitDataPayload,
     ReminderSpec,
@@ -150,6 +151,12 @@ class EditEventRequest(EventBaseRequest):
 
 class DeleteEventRequest(EventIdPayload):
     pass
+
+
+class SaveChecklistRequest(EventIdPayload):
+    # Capped because this is one document field, not a todo app: fifty lines
+    # is already more than anyone reads on an event card.
+    checklist: list[ChecklistItem] = Field(default_factory=list, max_length=50)
 
 
 class SaveNoteRequest(EventIdPayload):

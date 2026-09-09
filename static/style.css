@@ -1785,3 +1785,61 @@ a { color: var(--link); }
   margin: -8px 0 16px;
   border-radius: var(--r-md);
 }
+
+/* ── Batch 17 — note and checklist share the space ───── */
+
+/* Two tabs rather than two stacked blocks. The detail page is fixed height by
+   design, and stacking a second block under the note is exactly what pushed
+   the note off the screen the last time. */
+.pane-tabs {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 10px;
+}
+.pane-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border: none; border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: inherit; font-size: 0.8rem; font-weight: 800;
+  cursor: pointer;
+}
+.pane-tab.is-active { background: rgba(91, 108, 248, 0.14); color: var(--brand); }
+.pane-count {
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--brand); color: #fff;
+  font-size: 0.68rem;
+}
+
+.checklist { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.checklist-items { flex: 1; min-height: 0; overflow-y: auto; }
+
+.check-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.check-box {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--border-strong, var(--border));
+  border-radius: 7px;
+  background: none; color: #fff;
+  cursor: pointer;
+}
+.check-row.is-done .check-box { background: var(--brand); border-color: var(--brand); }
+.check-text { flex: 1; min-width: 0; font-size: 0.88rem; word-break: break-word; }
+.check-row.is-done .check-text { color: var(--text-muted); text-decoration: line-through; }
+.check-remove {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  border: none; background: none;
+  color: var(--text-muted);
+  font-size: 0.8rem; cursor: pointer;
+}
+
+.checklist-add { display: flex; gap: 8px; margin-top: 10px; }
+.checklist-add .field-input { flex: 1; min-width: 0; }
+.checklist-add-btn { width: 48px; flex-shrink: 0; font-size: 1.2rem; padding: 0; }

@@ -13,6 +13,7 @@ from app.schemas.requests import (
     EditEventRequest,
     ListEventsRequest,
     PinEventRequest,
+    SaveChecklistRequest,
     SaveNoteRequest,
 )
 from app.schemas.responses import (
@@ -27,6 +28,7 @@ from app.services.events import (
     delete_event_for_user,
     edit_event_for_user,
     list_events_for_user,
+    save_checklist_for_user,
     save_note_for_user,
     set_pin_for_user,
 )
@@ -89,6 +91,13 @@ async def api_note(request: Request, payload: SaveNoteRequest) -> NoteResponse:
     user_id = await get_authenticated_user_id(request, payload.initData)
     note = await save_note_for_user(user_id, payload)
     return NoteResponse(success=True, note=note)
+
+
+@router.post("/checklist")
+async def api_checklist(request: Request, payload: SaveChecklistRequest) -> dict:
+    user_id = await get_authenticated_user_id(request, payload.initData)
+    items = await save_checklist_for_user(user_id, payload)
+    return {"success": True, "checklist": items}
 
 
 @router.post("/pin", response_model=PinResponse)

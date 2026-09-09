@@ -18,6 +18,7 @@ from app.schemas.requests import (
     EditEventRequest,
     ListEventsRequest,
     PinEventRequest,
+    SaveChecklistRequest,
     SaveNoteRequest,
 )
 from app.schemas.responses import EventOut
@@ -93,6 +94,12 @@ def serialize_event(doc: dict) -> EventOut:
         repeat_until=doc.get("repeat_until"),
         lead_repeat=doc.get("lead_repeat", "none"),
         share_role=doc.get("share_role"),
+        # Personal, exactly like the note: a shared birthday does not carry
+        # one person's shopping list onto everyone else's copy.
+        checklist=[
+            item for item in (doc.get("checklist") or [])
+            if isinstance(item, dict) and str(item.get("text", "")).strip()
+        ],
     )
 
 
@@ -406,6 +413,39 @@ async def save_note_for_user(
         raise HTTPException(status_code=404, detail="NOT_FOUND_OR_UNAUTHORIZED")
 
     return note
+
+
+async def save_checklist_for_user(
+    user_id: str,
+    payload: SaveChecklistRequest,
+) -> list[dict]:
+    """Replace the whole checklist in one write.
+
+    Sending the list rather than a diff means ticking a box and deleting a
+    line take the same path, and two taps in quick succession cannot
+    interleave into a half-applied state.
+    """
+    events_coll = get_events_collection()
+
+    try:
+        oid = safe_object_id(payload.event_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="INVALID_ID_FORMAT") from exc
+
+    items = [
+        {"text": item.text.strip(), "done": bool(item.done)}
+        for item in payload.checklist
+        if item.text.strip()
+    ]
+
+    result = await events_coll.update_one(
+        {"_id": oid, "user_id": user_id},
+        {"$set": {"checklist": items, "updated_at": datetime.now(timezone.utc)}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="NOT_FOUND_OR_UNAUTHORIZED")
+
+    return items
 
 
 async def set_pin_for_user(user_id: str, payload: PinEventRequest) -> bool:

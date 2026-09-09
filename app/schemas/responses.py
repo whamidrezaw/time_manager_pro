@@ -4,7 +4,13 @@ from typing import Literal
 
 from pydantic import Field
 
-from app.schemas.common import APIModel, PaginationMeta, ReminderSpec, SuccessResponse
+from app.schemas.common import (
+    APIModel,
+    ChecklistItem,
+    PaginationMeta,
+    ReminderSpec,
+    SuccessResponse,
+)
 
 
 class EventOut(APIModel):
@@ -33,6 +39,7 @@ class EventOut(APIModel):
     lead_repeat: str = "none"
     # None for an ordinary event, "owner" or "member" for a shared one.
     share_role: str | None = None
+    checklist: list[ChecklistItem] = Field(default_factory=list)
 
 
 class ListEventsResponse(SuccessResponse):

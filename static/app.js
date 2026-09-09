@@ -355,6 +355,13 @@
       "daily until then": "روزانه تا آن روز",
       "weekly until then": "هفتگی تا آن روز",
       "monthly until then": "ماهانه تا آن روز",
+      "Note": "یادداشت",
+      "Checklist": "چک‌لیست",
+      "Add an item": "افزودن مورد",
+      "Remove item": "حذف مورد",
+      "That is as long as a checklist gets.": "چک‌لیست از این بلندتر نمی‌شود.",
+      "This removes it for everyone you shared it with, not only for you.":
+        "این رویداد برای همهٔ کسانی که با آن‌ها مشترکش کرده‌ای هم حذف می‌شود، نه فقط برای تو.",
       "Too many requests. Please slow down.": "درخواست‌ها زیاد است. کمی آهسته‌تر.",
       "Event not found or access denied.": "رویداد پیدا نشد یا دسترسی ندارید.",
       "The request failed. Please try again.": "درخواست ناموفق بود. دوباره تلاش کنید.",
@@ -1427,6 +1434,11 @@
     if (els.detailTimezone)     els.detailTimezone.textContent      = ev.tz_name     || "UTC";
     if (els.detailStatus)       els.detailStatus.textContent        = t(STATUS_LABELS[ev.notify_status] || "—");
     if (els.detailNote)         els.detailNote.value                = ev.note        || "";
+    checklist = Array.isArray(ev.checklist) ? ev.checklist.map(function (i) {
+      return { text: String(i.text || ""), done: !!i.done };
+    }) : [];
+    renderChecklist();
+    showPane("note");
 
     // Pin button label
     if (els.detailPinBtn) {
@@ -1531,7 +1543,11 @@
     // ✅ FIX: custom confirm dialog (window.confirm broken in Telegram WebView)
     const ok = await showConfirm({
       title:   "Delete Event?",
-      text:    `"${ev.title}" will be permanently removed.`,
+      // Batch 12c made this delete reach other people's accounts. A dialog
+      // that does not say so is worse than no dialog.
+      text: ev.share_role === "owner"
+        ? t("This removes it for everyone you shared it with, not only for you.")
+        : `"${ev.title}" will be permanently removed.`,
       okLabel: "Delete",
       icon:    "🗑️",
     });
@@ -2197,6 +2213,122 @@
     });
   }
 
+  /* ── Checklist ───────────────────────────────────────
+     Its own field on the event rather than lines inside the note. A checkbox
+     parsed back out of free text breaks the first time somebody edits the
+     text around it, and this one has to survive being edited every day. */
+
+  let checklist = [];
+
+  function showPane(name) {
+    document.querySelectorAll(".pane-tab").forEach((tab) => {
+      const active = tab.dataset.pane === name;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", String(active));
+    });
+    if (els.detailNote) els.detailNote.hidden = name !== "note";
+
+    const pane = document.getElementById("checklistPane");
+    if (pane) pane.hidden = name !== "checklist";
+
+    // Reset and Save belong to the note. The checklist saves itself on every
+    // tick, because a checkbox that needs a second button is a checkbox
+    // people forget to save.
+    const actions = document.querySelector("#detailSheet .form-actions");
+    if (actions) actions.hidden = name !== "note";
+  }
+
+  function renderChecklist() {
+    const wrap = document.getElementById("checklistItems");
+    const count = document.getElementById("checklistCount");
+    if (!wrap) return;
+
+    wrap.replaceChildren();
+    checklist.forEach((item, index) => {
+      const row = document.createElement("div");
+      row.className = "check-row" + (item.done ? " is-done" : "");
+
+      const box = document.createElement("button");
+      box.type = "button";
+      box.className = "check-box";
+      box.setAttribute("role", "checkbox");
+      box.setAttribute("aria-checked", String(!!item.done));
+      box.innerHTML = item.done
+        ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>'
+        : "";
+      box.addEventListener("click", () => {
+        checklist[index].done = !checklist[index].done;
+        try { tg?.HapticFeedback?.selectionChanged?.(); } catch (_) {}
+        renderChecklist();
+        saveChecklist();
+      });
+
+      const label = document.createElement("span");
+      label.className = "check-text";
+      label.textContent = item.text;
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "check-remove";
+      remove.setAttribute("aria-label", t("Remove item"));
+      remove.textContent = "✕";
+      remove.addEventListener("click", () => {
+        checklist.splice(index, 1);
+        renderChecklist();
+        saveChecklist();
+      });
+
+      row.append(box, label, remove);
+      wrap.appendChild(row);
+    });
+
+    if (count) {
+      const done = checklist.filter((item) => item.done).length;
+      count.textContent = checklist.length ? `${done}/${checklist.length}` : "";
+      count.hidden = !checklist.length;
+    }
+  }
+
+  function addChecklistItem() {
+    const input = document.getElementById("checklistInput");
+    const text = (input?.value || "").trim();
+    if (!text) return;
+    if (checklist.length >= 50) {
+      showToast(t("That is as long as a checklist gets."), "error");
+      return;
+    }
+
+    checklist.push({ text, done: false });
+    input.value = "";
+    renderChecklist();
+    saveChecklist();
+    input.focus();
+  }
+
+  async function saveChecklist() {
+    if (!state.detailEventId) return;
+    try {
+      await apiPost("/api/checklist", {
+        event_id: state.detailEventId,
+        checklist,
+      });
+      const target = getEventById(state.detailEventId);
+      if (target) target.checklist = checklist.map((item) => ({ ...item }));
+    } catch (error) {
+      showToast(normalizeError(error), "error");
+    }
+  }
+
+  function bindChecklist() {
+    document.querySelectorAll(".pane-tab").forEach((tab) => {
+      tab.addEventListener("click", () => showPane(tab.dataset.pane));
+    });
+    document.getElementById("checklistAdd")?.addEventListener("click", addChecklistItem);
+    document.getElementById("checklistInput")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); }
+    });
+  }
+
   /* ── Published surface ───────────────────────────────
      views.js lives outside this closure and needs three things from it: a way
      into the detail sheet, the loaded events, and the Jalali conversion. The
@@ -2218,6 +2350,7 @@
   initTelegram();
   bindEvents();
   bindDatePicker();
+  bindChecklist();
   loadEvents();
   showOnboardingIfNeeded();
 })();

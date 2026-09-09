@@ -412,11 +412,23 @@
       </div>
 
       <div class="field-group">
-        <label class="field-label" for="detailNote">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Event Note
-        </label>
-        <textarea id="detailNote" class="field-input field-textarea" rows="6" maxlength="2000" placeholder="Write a note, checklist, or details…"></textarea>
+        <div class="pane-tabs" role="tablist">
+          <button type="button" class="pane-tab is-active" data-pane="note" role="tab" aria-selected="true">
+            <span data-i18n>Note</span>
+          </button>
+          <button type="button" class="pane-tab" data-pane="checklist" role="tab" aria-selected="false">
+            <span data-i18n>Checklist</span>
+            <span class="pane-count" id="checklistCount" hidden></span>
+          </button>
+        </div>
+        <textarea id="detailNote" class="field-input field-textarea" rows="6" maxlength="2000" placeholder="Write a note or any details…"></textarea>
+        <div class="checklist" id="checklistPane" hidden>
+          <div class="checklist-items" id="checklistItems"></div>
+          <div class="checklist-add">
+            <input type="text" id="checklistInput" class="field-input" maxlength="200" placeholder="Add an item" />
+            <button type="button" class="btn-primary checklist-add-btn" id="checklistAdd" aria-label="Add item">+</button>
+          </div>
+        </div>
       </div>
 
       <div class="form-actions">

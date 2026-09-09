@@ -30,6 +30,18 @@ class APIModel(BaseModel):
 MAX_REMINDERS_PER_EVENT = 3
 
 
+class ChecklistItem(APIModel):
+    """One line of an event's checklist.
+
+    Its own field rather than lines inside the note: a checkbox that has to be
+    parsed back out of free text breaks the moment someone edits the text
+    around it.
+    """
+
+    text: str = Field(min_length=1, max_length=200)
+    done: bool = False
+
+
 class ReminderSpec(APIModel):
     """One reminder on an event.
 
