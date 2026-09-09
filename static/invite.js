@@ -70,6 +70,9 @@
 
     overlay.innerHTML =
       '<div class="invite-card" role="dialog" aria-modal="true">' +
+        (invite.card_url
+          ? '<img class="invite-image" alt="" src="' + invite.card_url + '" />'
+          : "") +
         '<span class="invite-tag">' + t("Shared event") + "</span>" +
         '<p class="invite-who"></p>' +
         '<h3 class="invite-title"></h3>' +

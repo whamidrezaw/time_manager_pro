@@ -86,6 +86,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "share_button": {"en": "Open in TimeManager", "fa": "باز کردن در تایم‌منیجر"},
     "share_open_button": {"en": "Open in Telegram", "fa": "باز کردن در تلگرام"},
+    "share_join_button": {
+        "en": "Add to my events",
+        "fa": "به رویدادهای من اضافه کن",
+    },
     "share_made_with": {
         "en": "Made with TimeManager Pro",
         "fa": "ساخته‌شده با تایم‌منیجر پرو",

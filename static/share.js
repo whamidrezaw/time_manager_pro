@@ -29,6 +29,8 @@
     "Could not load sharing.": "وضعیت اشتراک‌گذاری بارگذاری نشد.",
     "Something went wrong.": "مشکلی پیش آمد.",
     "Share the event itself with someone": "این رویداد را با کسی مشترک کن",
+    "Public link is on. Switch it off any time.": "لینک عمومی روشن شد. هر وقت خواستی خاموشش کن.",
+    "Let's keep this one in sync.": "بیا این را با هم هماهنگ نگه داریم.",
     "Anyone who opens this link gets their own copy, kept in step with yours.":
       "هر کسی این لینک را باز کند نسخهٔ خودش را می‌گیرد که با نسخهٔ تو همگام می‌ماند.",
   };
@@ -272,6 +274,15 @@
 
     try {
       state = await api("/api/share/state", { event_id: current });
+
+      // On by default now. Opening this sheet is already the decision to show
+      // the event to someone, and making that a separate switch only meant the
+      // first tap on "send" did nothing. It is announced rather than silent,
+      // and the switch is right there to turn it back off.
+      if (!state.enabled) {
+        state = await api("/api/share/toggle", { event_id: current, enabled: true });
+        els.hint.textContent = t("Public link is on. Switch it off any time.");
+      }
       render();
     } catch (_) {
       els.hint.textContent = t("Could not load sharing.");
@@ -288,7 +299,12 @@
 
     try {
       var group = await api("/api/group/link", { event_id: current });
-      var url = "https://t.me/share/url?url=" + encodeURIComponent(group.invite_url);
+      // The public page, not the t.me deep link: Telegram renders that one as
+      // the bot's profile card, and this one as the event itself. The page
+      // behind it carries the button that adds the event to their calendar.
+      var target = group.public_url || group.invite_url;
+      var url = "https://t.me/share/url?url=" + encodeURIComponent(target)
+        + "&text=" + encodeURIComponent(t("Let's keep this one in sync."));
       if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
       else window.open(url, "_blank");
       els.groupHint.textContent = t("Anyone who opens this link gets their own copy, kept in step with yours.");

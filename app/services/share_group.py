@@ -94,10 +94,26 @@ async def start_group(user_id: str, event_id, settings: Settings | None = None) 
         )
         logger.info("share group opened user_id=%s event_id=%s", user_id, event["_id"])
 
+    # An invite is only worth sending if it shows the event, and the picture
+    # lives behind the public token. Turning that on here rather than asking
+    # is deliberate: someone who just pressed "share this event with someone"
+    # has already decided to show it to that someone.
+    from app.services.sharing import card_url, describe, public_url, set_share_state
+
+    fresh = await get_events_collection().find_one({"_id": event["_id"]})
+    share = describe(fresh or {}, settings)
+    if not share["enabled"]:
+        share = await set_share_state(user_id, str(event["_id"]), True, settings)
+
+    public_token = share.get("token")
+
     return {
         "success": True,
         "token": token,
         "invite_url": invite_url(token, settings),
+        # What actually gets posted: Telegram previews this one as the card.
+        "public_url": public_url(public_token, settings) if public_token else None,
+        "card_url": card_url(public_token, settings) if public_token else None,
         "members": await member_count(share_id),
     }
 

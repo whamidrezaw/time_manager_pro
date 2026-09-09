@@ -40,12 +40,20 @@
       font-size: 1rem; font-weight: 700; text-decoration: none;
     }
     a.cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+    a.cta-quiet {
+      background: transparent; color: #fff;
+      border: 1.5px solid rgba(255, 255, 255, 0.55);
+      font-weight: 500;
+    }
     footer { font-size: 0.82rem; opacity: 0.7; text-align: center; }
   </style>
 </head>
 <body>
   <img src="{{ card_url }}" alt="{{ title }}" />
-  <a class="cta" href="{{ miniapp_url }}">{{ open_label }}</a>
+  {% if join_url %}<a class="cta" href="{{ join_url }}">{{ join_label }}</a>
+  <a class="cta cta-quiet" href="{{ miniapp_url }}">{{ open_label }}</a>
+  {% else %}<a class="cta" href="{{ miniapp_url }}">{{ open_label }}</a>
+  {% endif %}
   <footer>{{ made_with }} · {{ bot_handle }}</footer>
 
   <script>

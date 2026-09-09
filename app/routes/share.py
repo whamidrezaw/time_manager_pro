@@ -146,6 +146,17 @@ async def public_countdown(request: Request, token: str):
             "page_url": public_url(token, settings),
             "miniapp_url": miniapp_url(token, settings),
             "bot_handle": f"@{settings.telegram_bot_username}",
+            # Only set when the event is part of a share group: this is the
+            # button that turns a link someone forwarded into an event of
+            # your own, without going through the bot's profile page first.
+            "join_url": (
+                f"https://t.me/{settings.telegram_bot_username}/"
+                f"{settings.telegram_mini_app_short_name}"
+                f"?startapp=s_{event['share_token']}"
+                if event.get("share_token") and event.get("share_role") == "owner"
+                else None
+            ),
+            "join_label": t("share_join_button", language),
             "open_label": t("share_open_button", language),
             "made_with": t("share_made_with", language),
         },

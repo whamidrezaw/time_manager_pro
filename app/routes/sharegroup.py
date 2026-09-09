@@ -64,8 +64,16 @@ async def api_group_invite(request: Request, payload: TokenPayload) -> dict:
         raise HTTPException(status_code=404, detail="INVITE_NOT_FOUND")
 
     owner_id = str(origin.get("user_id"))
+
+    # Shown on the invite screen so the decision is made looking at the event
+    # rather than at a name and a date in plain text.
+    from app.services.sharing import card_url as public_card_url
+
+    token_public = origin.get("public_token") if origin.get("public_enabled") else None
+
     return {
         "success": True,
+        "card_url": public_card_url(token_public, settings) if token_public else None,
         "title": origin.get("title", ""),
         "date_iso": origin.get("date_iso", ""),
         "date_jalali": origin.get("date_jalali", ""),

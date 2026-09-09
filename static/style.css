@@ -1756,3 +1756,32 @@ a { color: var(--link); }
 @media (prefers-reduced-motion: reduce) {
   .invite-overlay { transition: none; }
 }
+
+/* ── Batch 16 — a share sheet with some colour in it ─── */
+
+/* Copy and share were two grey buttons of equal weight, which told nobody
+   what to press. Now the primary action carries the brand and the secondary
+   one is tinted rather than empty. */
+.shr-actions #shrCopy {
+  border-color: transparent;
+  background: rgba(91, 108, 248, 0.12);
+  color: var(--brand);
+  font-weight: 800;
+}
+.shr-actions #shrCopy:active { background: rgba(91, 108, 248, 0.2); }
+
+.shr-group {
+  border: none;
+  background: linear-gradient(160deg, #ec4899, #be185d);
+  color: #fff;
+  font-weight: 800;
+}
+.shr-group:active { filter: brightness(0.94); }
+.shr-group:disabled { opacity: 0.6; }
+
+.invite-image {
+  display: block;
+  width: 100%; height: auto;
+  margin: -8px 0 16px;
+  border-radius: var(--r-md);
+}
