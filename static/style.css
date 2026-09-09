@@ -1650,3 +1650,62 @@ a { color: var(--link); }
 
 /* A page does not need the sheet's dimmed backdrop behind it. */
 .detail-page:not([hidden]) ~ .sheet-overlay { display: none; }
+
+/* ── Batch 13e — the note comes back, the today button grows ── */
+
+/* Why the note vanished: everything above it is fixed height, the card clips
+   its overflow, and on a short screen the sum of badges, title, ring, six
+   fact boxes and four actions was simply taller than the viewport. The note
+   was not hidden by a rule — it was pushed past the bottom edge and cut off.
+   So the block above it is made shorter, and the note is given a floor that
+   nothing else may take. */
+
+.detail-page .detail-card { gap: 10px; }
+
+/* The ring stops being a centrepiece and lies down next to its own label.
+   That alone is about a hundred pixels. */
+.detail-page .countdown-ring-wrap {
+  display: flex; flex-direction: row; align-items: center;
+  gap: 14px; margin: 0;
+}
+.detail-page .countdown-ring { width: 78px; height: 78px; flex-shrink: 0; }
+.detail-page .ring-days { font-size: 1.5rem; }
+.detail-page .countdown-ring-text { margin: 0; text-align: start; }
+
+.detail-page .detail-event-title { margin: 0; font-size: 1.15rem; }
+.detail-page .detail-topline { margin: 0; }
+.detail-page .detail-meta-box { padding: 7px 10px; }
+.detail-page .detail-meta-box strong { font-size: 0.8rem; }
+
+/* The note's floor. flex-basis 0 with a real min-height means it claims its
+   share first and cannot be squeezed to nothing by a long title. */
+.detail-page .field-group {
+  flex: 1 1 0;
+  min-height: 132px;
+}
+.detail-page .field-textarea { flex: 1; min-height: 84px; }
+
+/* Safety valve. The numbers above should fit any phone, but a very large
+   system font can still overflow them — and a card that scrolls a little is
+   far better than one that silently swallows the note. */
+.detail-page .detail-card { overflow-y: auto; }
+
+/* ── Today button ────────────────────────────────────── */
+
+.cal-head-mid { display: contents; }
+
+.cal-todaybar {
+  display: flex; justify-content: flex-start;
+  margin: -6px 0 14px;
+}
+.cal-today {
+  padding: 7px 20px;
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  color: #fff;
+  font-family: inherit; font-size: 0.85rem; font-weight: 800;
+  box-shadow: 0 4px 14px rgba(91, 108, 248, 0.32);
+  cursor: pointer;
+}
+.cal-today:active { transform: scale(0.97); background: var(--brand); }

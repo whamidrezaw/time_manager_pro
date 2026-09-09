@@ -187,11 +187,13 @@
     var html = '<div class="year-strip" id="yearStrip" aria-hidden="true"></div>'
       + '<div class="cal-head">'
       + '<button type="button" class="icon-btn" data-step="-1" aria-label="' + t("Previous month") + '">‹</button>'
-      + '<span class="cal-head-mid"><span class="cal-title">' + meta.label + "</span>"
-      + '<button type="button" class="cal-today" id="calToday" aria-label="' + t("Go to today") + '"'
-      + (onToday ? " hidden" : "") + ">" + t("Today") + "</button></span>"
+      + '<span class="cal-title">' + meta.label + "</span>"
       + '<button type="button" class="icon-btn" data-step="1" aria-label="' + t("Next month") + '">›</button>'
-      + '</div><div class="cal-dow">';
+      + "</div>"
+      + '<div class="cal-todaybar">'
+      + '<button type="button" class="cal-today" id="calToday" aria-label="' + t("Go to today") + '"'
+      + (onToday ? " hidden" : "") + ">" + t("Today") + "</button></div>"
+      + '<div class="cal-dow">';
     dow.forEach(function (name) { html += "<span>" + name + "</span>"; });
     html += '</div><div class="cal-grid">';
 
