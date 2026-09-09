@@ -1709,3 +1709,50 @@ a { color: var(--link); }
   cursor: pointer;
 }
 .cal-today:active { transform: scale(0.97); background: var(--brand); }
+
+/* ── Batch 12c — shared events ───────────────────────── */
+
+.shr-group { width: 100%; margin-top: 10px; }
+
+.invite-overlay {
+  position: fixed; inset: 0; z-index: 85;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: rgba(10, 12, 30, 0.6);
+  opacity: 0; transition: opacity 200ms ease;
+}
+.invite-overlay.is-open { opacity: 1; }
+
+.invite-card {
+  width: min(100%, 400px);
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+.invite-tag {
+  display: inline-block; padding: 4px 14px; margin-bottom: 14px;
+  border-radius: var(--r-pill);
+  background: rgba(91, 108, 248, 0.12); color: var(--brand);
+  font-size: 0.72rem; font-weight: 800;
+}
+.invite-who { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+.invite-title { margin: 8px 0 4px; font-size: 1.25rem; font-weight: 800; }
+.invite-date { margin: 0; font-size: 0.85rem; color: var(--text-2); }
+.invite-error {
+  margin: 14px 0 0; font-size: 0.82rem; color: var(--danger);
+}
+.invite-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;
+}
+
+/* A member cannot change what the event is or when it happens, so the fields
+   that carry those say so instead of failing quietly on save. */
+.is-shared-member .field-input:disabled,
+.is-shared-member .field-select:disabled { opacity: 0.65; }
+
+@media (prefers-reduced-motion: reduce) {
+  .invite-overlay { transition: none; }
+}

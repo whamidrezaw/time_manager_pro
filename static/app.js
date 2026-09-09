@@ -1095,6 +1095,7 @@
 
     f.title.textContent = event.title || "";
     f.pin.hidden = !event.pinned;
+    art.classList.toggle("is-shared", !!event.share_role);
     f.pinText.textContent = t("Pinned");
     f.cat.className = `badge ${getCatBadgeClass(event.category)}`;
     f.cat.textContent = catLabel;
@@ -1361,6 +1362,16 @@
     if (els.repeatUntil)  els.repeatUntil.value  = event.repeat_until || "";
     const leadSelect = document.getElementById("leadRepeat");
     if (leadSelect) leadSelect.value = event.lead_repeat || "none";
+
+    // On a shared copy the creator owns what the event is and when it is. The
+    // server drops those fields on save anyway; disabling them here is what
+    // stops someone typing a new title and wondering where it went.
+    const isMember = event.share_role === "member";
+    document.body.classList.toggle("is-shared-member", isMember);
+    ["title", "date", "dateJalali", "repeat", "repeatUntil", "category",
+     "allDay", "eventTime"].forEach((key) => {
+      if (els[key]) els[key].disabled = isMember;
+    });
     updateRepeatUntilVisibility();
     updateAllDayVisibility();
     if (els.pin)        els.pin.checked      = !!event.pinned;

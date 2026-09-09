@@ -73,3 +73,26 @@ async def save_prepared_inline_message(
         raise RuntimeError("PREPARE_FAILED")
 
     return body["result"]["id"]
+
+
+async def get_first_name(user_id: str, settings: Settings | None = None) -> str:
+    """The inviter's first name, asked for at the moment it is shown.
+
+    Deliberately not stored anywhere. An invite has to say who it is from or
+    nobody will tap it, but that is a reason to display a name for one screen,
+    not a reason to keep a copy of it on somebody else's account.
+    """
+    settings = settings or get_settings()
+    url = f"https://api.telegram.org/bot{settings.bot_token}/getChat"
+
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            response = await client.post(url, json={"chat_id": int(user_id)})
+        body = response.json()
+    except Exception:
+        logger.warning("getChat failed for %s", user_id)
+        return ""
+
+    if not body.get("ok"):
+        return ""
+    return str(body["result"].get("first_name") or "")

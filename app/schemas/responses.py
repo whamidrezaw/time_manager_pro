@@ -31,6 +31,8 @@ class EventOut(APIModel):
     reminder_minute: int = 0
     repeat_until: str | None = None
     lead_repeat: str = "none"
+    # None for an ordinary event, "owner" or "member" for a shared one.
+    share_role: str | None = None
 
 
 class ListEventsResponse(SuccessResponse):

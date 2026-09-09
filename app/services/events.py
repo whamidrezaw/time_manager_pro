@@ -92,6 +92,7 @@ def serialize_event(doc: dict) -> EventOut:
         reminder_minute=doc.get("reminder_minute", 0),
         repeat_until=doc.get("repeat_until"),
         lead_repeat=doc.get("lead_repeat", "none"),
+        share_role=doc.get("share_role"),
     )
 
 
@@ -334,10 +335,26 @@ async def edit_event_for_user(
     event_data = _normalize_event_input(payload, settings)
     event_data["updated_at"] = datetime.now(timezone.utc)
 
+    # A member may keep their own note, reminder and pin, but the shared
+    # fields belong to the creator. Silently dropping them here rather than
+    # rejecting the whole request keeps the edit form usable for a member.
+    if existing.get("share_role") == "member":
+        from app.services.share_group import SHARED_FIELDS
+
+        event_data = {k: v for k, v in event_data.items() if k not in SHARED_FIELDS}
+
     await events_coll.update_one(
         {"_id": oid, "user_id": user_id},
         {"$set": event_data},
     )
+
+    if existing.get("share_role") == "owner":
+        try:
+            from app.services.share_group import propagate
+
+            await propagate(user_id, {**existing, **event_data})
+        except Exception:
+            logger.exception("share propagation failed event_id=%s", oid)
 
 
 async def delete_event_for_user(user_id: str, event_id: str) -> None:
@@ -348,9 +365,19 @@ async def delete_event_for_user(user_id: str, event_id: str) -> None:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="INVALID_ID_FORMAT") from exc
 
-    result = await events_coll.delete_one({"_id": oid, "user_id": user_id})
-    if result.deleted_count == 0:
+    # Deleted and returned in one step, because the document is what says
+    # whether other people's copies have to go with it.
+    removed = await events_coll.find_one_and_delete({"_id": oid, "user_id": user_id})
+    if removed is None:
         raise HTTPException(status_code=404, detail="NOT_FOUND_OR_UNAUTHORIZED")
+
+    if removed.get("share_role") == "owner":
+        try:
+            from app.services.share_group import cascade_delete
+
+            await cascade_delete(removed)
+        except Exception:
+            logger.exception("share cascade failed event_id=%s", oid)
 
 
 async def save_note_for_user(

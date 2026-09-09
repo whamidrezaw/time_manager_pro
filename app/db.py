@@ -86,6 +86,12 @@ async def ensure_indexes(settings: Settings | None = None) -> None:
     # standing between a public URL and someone else's event.
     await events.create_index("public_token", unique=True, sparse=True)
 
+    # Batch 12c. The token is unique because it is the only thing that
+    # decides which event a stranger is about to join; share_id is the
+    # key every propagation and cascade walks.
+    await events.create_index("share_token", unique=True, sparse=True)
+    await events.create_index("share_id", sparse=True)
+
     users = get_users_collection()
 
     # sparse: user documents written before Batch 12a carry no ref_code,

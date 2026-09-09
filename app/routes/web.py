@@ -23,7 +23,8 @@ def _compute_asset_version() -> str:
     build — which would quietly swallow any front-end fix.
     """
     digest = hashlib.sha256()
-    for name in ("style.css", "app.js", "referral.js", "share.js", "views.js"):
+    for name in ("style.css", "app.js", "referral.js", "share.js", "views.js",
+                 "invite.js"):
         path = STATIC_DIR / name
         if path.exists():
             digest.update(path.read_bytes())

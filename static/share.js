@@ -28,6 +28,9 @@
     "Turn on sharing to send the card.": "برای ارسال کارت، اشتراک‌گذاری را روشن کن.",
     "Could not load sharing.": "وضعیت اشتراک‌گذاری بارگذاری نشد.",
     "Something went wrong.": "مشکلی پیش آمد.",
+    "Share the event itself with someone": "این رویداد را با کسی مشترک کن",
+    "Anyone who opens this link gets their own copy, kept in step with yours.":
+      "هر کسی این لینک را باز کند نسخهٔ خودش را می‌گیرد که با نسخهٔ تو همگام می‌ماند.",
   };
 
   var isFa = String(
@@ -91,6 +94,9 @@
           '<button type="button" class="btn-secondary" id="shrCopy">' + t("Copy link") + "</button>" +
           '<button type="button" class="btn-primary" id="shrSend">' + t("Send in Telegram") + "</button>" +
         "</div>" +
+        '<button type="button" class="btn-secondary shr-group" id="shrGroup">' +
+          t("Share the event itself with someone") + "</button>" +
+        '<p class="shr-hint" id="shrGroupHint"></p>' +
       "</div>";
 
     document.body.appendChild(overlay);
@@ -110,6 +116,10 @@
     els.switch.addEventListener("click", onToggle);
     els.copy.addEventListener("click", copyLink);
     els.send.addEventListener("click", sendCard);
+
+    els.group = overlay.querySelector("#shrGroup");
+    els.groupHint = overlay.querySelector("#shrGroupHint");
+    els.group.addEventListener("click", inviteToEvent);
   }
 
   function confirmPublic() {
@@ -265,6 +275,27 @@
       render();
     } catch (_) {
       els.hint.textContent = t("Could not load sharing.");
+    }
+  }
+
+  // Sharing the picture and sharing the event are different things: one sends
+  // a snapshot, the other links two calendars together. Same sheet, separate
+  // buttons, so nobody links an account when they meant to post an image.
+  async function inviteToEvent() {
+    if (!current) return;
+    haptic("success");
+    els.group.disabled = true;
+
+    try {
+      var group = await api("/api/group/link", { event_id: current });
+      var url = "https://t.me/share/url?url=" + encodeURIComponent(group.invite_url);
+      if (tg && typeof tg.openTelegramLink === "function") tg.openTelegramLink(url);
+      else window.open(url, "_blank");
+      els.groupHint.textContent = t("Anyone who opens this link gets their own copy, kept in step with yours.");
+    } catch (_) {
+      els.groupHint.textContent = t("Something went wrong.");
+    } finally {
+      els.group.disabled = false;
     }
   }
 
