@@ -57,6 +57,9 @@ class EventBaseRequest(InitDataPayload):
     timezone: str = Field(default="UTC", min_length=1, max_length=128)
     repeat: RepeatType = "none"
     repeat_until: str | None = Field(default=None)
+    # Deliberately separate from `repeat`: one answers "does this happen
+    # again", the other "how often should I hear about it until it does".
+    lead_repeat: Literal["none", "daily", "weekly", "monthly"] = "none"
     category: CategoryType = "general"
     note: str = Field(default="", max_length=2000)
     pinned: bool = False

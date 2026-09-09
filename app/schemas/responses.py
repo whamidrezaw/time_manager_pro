@@ -30,6 +30,7 @@ class EventOut(APIModel):
     reminder_hour: int = 9
     reminder_minute: int = 0
     repeat_until: str | None = None
+    lead_repeat: str = "none"
 
 
 class ListEventsResponse(SuccessResponse):

@@ -346,6 +346,15 @@
       "Could not share. Please try copying manually.": "اشتراک‌گذاری ممکن نشد. دستی کپی کنید.",
       "The note is too long (max 2000 chars).": "یادداشت خیلی بلند است (حداکثر ۲۰۰۰ نویسه).",
       "You have reached your event limit. Invite friends to raise it.": "به سقف رویدادهایتان رسیده‌اید. با دعوت دوستان آن را بالا ببرید.",
+      "Remind me until then": "تا آن روز یادم بینداز",
+      "Reminders before the event. They stop once the day arrives.": "یادآوری‌های قبل از رویداد. با رسیدن آن روز تمام می‌شوند.",
+      "Only on the day": "فقط روز رویداد",
+      "Every day": "هر روز",
+      "Every week": "هر هفته",
+      "Every month": "هر ماه",
+      "daily until then": "روزانه تا آن روز",
+      "weekly until then": "هفتگی تا آن روز",
+      "monthly until then": "ماهانه تا آن روز",
       "Too many requests. Please slow down.": "درخواست‌ها زیاد است. کمی آهسته‌تر.",
       "Event not found or access denied.": "رویداد پیدا نشد یا دسترسی ندارید.",
       "The request failed. Please try again.": "درخواست ناموفق بود. دوباره تلاش کنید.",
@@ -439,6 +448,14 @@
   const REPEAT_LABELS = {
     none: "One time", daily: "🔁 Daily",
     weekly: "🔁 Weekly", monthly: "🔁 Monthly", yearly: "🎂 Yearly",
+  };
+
+  // Shown next to the reminder time on the detail page, so it is obvious at a
+  // glance that an event will speak up before its day and not only on it.
+  const LEAD_LABELS = {
+    daily: "daily until then",
+    weekly: "weekly until then",
+    monthly: "monthly until then",
   };
 
   const STATUS_LABELS = {
@@ -1342,6 +1359,8 @@
       );
     }
     if (els.repeatUntil)  els.repeatUntil.value  = event.repeat_until || "";
+    const leadSelect = document.getElementById("leadRepeat");
+    if (leadSelect) leadSelect.value = event.lead_repeat || "none";
     updateRepeatUntilVisibility();
     updateAllDayVisibility();
     if (els.pin)        els.pin.checked      = !!event.pinned;
@@ -1389,7 +1408,9 @@
     }
     const reminderBox = document.getElementById("detailReminder");
     if (reminderBox) {
-      reminderBox.textContent = reminderTimeText(ev) || t("Before the event");
+      const at = reminderTimeText(ev) || t("Before the event");
+      const lead = LEAD_LABELS[ev.lead_repeat] || "";
+      reminderBox.textContent = lead ? `${at} · ${t(lead)}` : at;
     }
 
     if (els.detailTimezone)     els.detailTimezone.textContent      = ev.tz_name     || "UTC";
@@ -1450,6 +1471,7 @@
       reminder_hour: Number(timeH ?? 9),
       reminder_minute: Number(timeM ?? 0),
       repeat_until: (els.repeat?.value !== "none" && els.repeatUntil?.value) || null,
+      lead_repeat: document.getElementById("leadRepeat")?.value || "none",
     };
 
     if (!payload.title) {

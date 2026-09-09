@@ -41,7 +41,9 @@ class ReminderSpec(APIModel):
     that raising that later needs no schema migration.
     """
 
-    mode: Literal["absolute", "relative"] = "absolute"
+    mode: Literal["absolute", "relative", "lead"] = "absolute"
+    # Only set on mode="lead": how many days before the event it fires.
+    days_before: int = Field(default=0, ge=0, le=400)
     hour: int = Field(default=9, ge=0, le=23)
     minute: int = Field(default=0, ge=0, le=59)
     offset_minutes: int = Field(default=0, ge=0, le=43200)

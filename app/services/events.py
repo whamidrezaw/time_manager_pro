@@ -22,6 +22,7 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import EventOut
 from app.utils.dates import (
+    build_lead_reminders,
     expire_for_repeat,
     first_schedule,
     normalize_reminders,
@@ -90,6 +91,7 @@ def serialize_event(doc: dict) -> EventOut:
         reminder_hour=doc.get("reminder_hour", 9),
         reminder_minute=doc.get("reminder_minute", 0),
         repeat_until=doc.get("repeat_until"),
+        lead_repeat=doc.get("lead_repeat", "none"),
     )
 
 
@@ -133,6 +135,11 @@ def _normalize_event_input(
         legacy_hour=payload.reminder_hour,
         legacy_minute=payload.reminder_minute,
     )
+
+    # The nudges that run up to the event. Appended to the same list the
+    # scheduler already reads, so nothing downstream needs to know they exist.
+    lead_repeat = str(getattr(payload, "lead_repeat", "none") or "none")
+    reminders = reminders + build_lead_reminders(lead_repeat, reminders)
 
     tz, tz_name = safe_zoneinfo(payload.timezone)
     try:
@@ -180,6 +187,7 @@ def _normalize_event_input(
         "reminder_hour":        (first_absolute or {}).get("hour", payload.reminder_hour),
         "reminder_minute":      (first_absolute or {}).get("minute", payload.reminder_minute),
         "repeat_until":         repeat_until,
+        "lead_repeat":          lead_repeat,
         "notify_status":        "pending" if notify_utc is not None else "done",
         "notify_attempts":      0,
         "processing_started_at": None,

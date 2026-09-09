@@ -13,6 +13,17 @@ REPEAT_VALUES = {"none", "daily", "weekly", "monthly", "yearly"}
 
 # A reminder may sit at most 30 days ahead of its event.
 MAX_OFFSET_MINUTES = 60 * 24 * 30
+
+# Lead reminders: the nudges that run up to the event and stop on the day.
+# They cannot be expressed as relative reminders because those are capped at
+# 30 days and are dropped for all-day events, and "remind me weekly for three
+# months about my instalment" is exactly an all-day event 84 days out.
+LEAD_VALUES = {"none", "daily", "weekly", "monthly"}
+LEAD_STEP_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
+# Twelve steps: a weekly lead starts about three months out, a daily one
+# twelve days out. Enough to be useful, few enough not to become noise.
+MAX_LEAD_REMINDERS = 12
+MAX_LEAD_DAYS = 400
 # Enough to walk a daily event roughly 11 years forward before giving up.
 MAX_SCHEDULE_STEPS = 4000
 
@@ -175,7 +186,21 @@ def normalize_reminders(
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict):
             continue
-        if str(item.get("mode", "absolute")).lower() == "relative":
+        mode = str(item.get("mode", "absolute")).lower()
+
+        if mode == "lead":
+            days = int(item.get("days_before", 0) or 0)
+            if days <= 0:
+                continue
+            specs.append({
+                "mode": "lead",
+                "days_before": min(days, MAX_LEAD_DAYS),
+                "hour": max(0, min(int(item.get("hour", legacy_hour) or 0), 23)),
+                "minute": max(0, min(int(item.get("minute", legacy_minute) or 0), 59)),
+            })
+            continue
+
+        if mode == "relative":
             offset = int(item.get("offset_minutes", 0) or 0)
             specs.append({
                 "mode": "relative",
@@ -189,7 +214,9 @@ def normalize_reminders(
             })
 
     if all_day:
-        specs = [spec for spec in specs if spec["mode"] == "absolute"]
+        # A lead reminder survives here where a relative one does not: it names
+        # a day and a wall-clock time, both of which an all-day event has.
+        specs = [spec for spec in specs if spec["mode"] in ("absolute", "lead")]
 
     if not specs:
         specs = [{
@@ -203,6 +230,19 @@ def normalize_reminders(
 
 def reminder_fire_time(spec: dict, occurrence_utc: datetime, tz: ZoneInfo) -> datetime:
     """When a single reminder fires, in UTC."""
+    if spec.get("mode") == "lead":
+        # Counted in days on the local calendar rather than in hours, so a lead
+        # reminder keeps its time of day across a daylight-saving change.
+        local = occurrence_utc.astimezone(tz) - timedelta(
+            days=int(spec.get("days_before", 0))
+        )
+        return local.replace(
+            hour=int(spec.get("hour", DEFAULT_REMINDER_HOUR)),
+            minute=int(spec.get("minute", DEFAULT_REMINDER_MINUTE)),
+            second=0,
+            microsecond=0,
+        ).astimezone(timezone.utc)
+
     if spec.get("mode") == "relative":
         return occurrence_utc - timedelta(minutes=int(spec.get("offset_minutes", 0)))
 
@@ -289,10 +329,15 @@ def first_schedule(
     occurrence = build_occurrence(date_str, tz, all_day, time_hm)
 
     if repeat == "none":
-        # Unchanged behaviour for one-off events: if the reminder time has
-        # already passed, it still fires on the next worker pass rather than
-        # being dropped silently.
-        return occurrence, earliest_fire(reminders, occurrence, tz)
+        # Prefer a reminder that is still ahead. Lead reminders sit weeks before
+        # the event, so on an event created close to its date several of them
+        # are already in the past — firing one of those the moment the event is
+        # saved would be a notification about nothing.
+        ahead = earliest_fire(reminders, occurrence, tz, after=now)
+        # The unfiltered fallback is the old behaviour, kept: an event whose
+        # only reminder time has just passed still fires on the next pass
+        # rather than being dropped silently.
+        return occurrence, ahead or earliest_fire(reminders, occurrence, tz)
 
     if not _past_until(occurrence, tz, repeat_until):
         fire = earliest_fire(reminders, occurrence, tz, after=now)
@@ -308,3 +353,35 @@ def first_schedule(
         repeat_until=repeat_until,
         now=now,
     )
+
+
+def build_lead_reminders(
+    lead_repeat: str | None,
+    reminders: list[dict],
+    max_count: int = MAX_LEAD_REMINDERS,
+) -> list[dict]:
+    """Turn "remind me weekly until it arrives" into ordinary reminder specs.
+
+    Expanding here rather than teaching the scheduler a new concept is what
+    keeps next_schedule, earliest_fire and the worker untouched: to all of
+    them these are simply more reminders on the same occurrence, and the
+    worker already drains an occurrence before moving to the next one.
+
+    The clock time is copied from the event's own reminder, so a lead reminder
+    never arrives at an hour the user did not choose.
+    """
+    step = LEAD_STEP_DAYS.get(str(lead_repeat or "none").lower())
+    if not step:
+        return []
+
+    hour, minute = DEFAULT_REMINDER_HOUR, DEFAULT_REMINDER_MINUTE
+    for spec in reminders:
+        if spec.get("mode") == "absolute":
+            hour, minute = int(spec["hour"]), int(spec["minute"])
+            break
+
+    return [
+        {"mode": "lead", "days_before": step * n, "hour": hour, "minute": minute}
+        for n in range(1, max(0, max_count) + 1)
+        if step * n <= MAX_LEAD_DAYS
+    ]
