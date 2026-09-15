@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from app.utils.dates import (
     _past_until,
     advance_occurrence,
+    as_utc,
     build_occurrence,
     safe_zoneinfo,
 )
@@ -81,7 +82,7 @@ def expand_occurrences(event: dict, start: date, end: date,
     if str(event.get("notify_status")) == "done":
         last = event.get("event_ts_utc")
         if isinstance(last, datetime):
-            end = min(end, last.astimezone(tz).date())
+            end = min(end, as_utc(last).astimezone(tz).date())
             if end < start:
                 return []
     occurrence = _fast_forward(occurrence, repeat, tz, start)

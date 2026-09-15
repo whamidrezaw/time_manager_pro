@@ -23,11 +23,13 @@ def _compute_asset_version() -> str:
     build — which would quietly swallow any front-end fix.
     """
     digest = hashlib.sha256()
-    for name in ("style.css", "app.js", "referral.js", "share.js", "views.js",
-                 "invite.js"):
-        path = STATIC_DIR / name
-        if path.exists():
-            digest.update(path.read_bytes())
+    # Globbed rather than listed. The hand-written list had already fallen
+    # behind once: countdown.css and countdown.js were added without being
+    # added here, so an edit to either would have kept serving the cached
+    # copy - exactly the failure this function exists to prevent.
+    for path in sorted(STATIC_DIR.glob("*.css")) + sorted(STATIC_DIR.glob("*.js")):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
     return digest.hexdigest()[:10]
 
 

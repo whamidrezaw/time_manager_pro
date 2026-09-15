@@ -82,6 +82,27 @@ class EventBaseRequest(InitDataPayload):
     reminder_hour: int = Field(default=9, ge=0, le=23)
     reminder_minute: int = Field(default=0, ge=0, le=59)
 
+    @field_validator("reminders", mode="before")
+    @classmethod
+    def drop_generated_reminders(cls, value):
+        """Ignore lead reminders coming back from a client.
+
+        EventOut returns the whole stored list, which for a weekly lead_repeat
+        is thirteen specs: one the user set plus twelve the server generated.
+        Echoing that back used to fail validation against a cap of three. The
+        lead ones are rebuilt from lead_repeat on every save anyway, so the
+        honest rule is that the client owns the absolute reminders and the
+        server owns the lead ones.
+        """
+        if not isinstance(value, list):
+            return value
+        kept = []
+        for item in value:
+            mode = item.get("mode") if isinstance(item, dict) else getattr(item, "mode", None)
+            if mode != "lead":
+                kept.append(item)
+        return kept
+
     @field_validator("title")
     @classmethod
     def validate_title(cls, value: str) -> str:

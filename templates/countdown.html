@@ -15,40 +15,9 @@
   <meta name="twitter:image" content="{{ card_url }}" />
   <meta name="robots" content="noindex" />
 
-  <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; min-height: 100svh;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 24px;
-      padding: 24px;
-      background: radial-gradient(circle at 20% 0%, #4f46e5, #2e1065 70%);
-      color: #fff;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    img {
-      width: min(100%, 460px); height: auto;
-      border-radius: 28px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-    }
-    a.cta {
-      display: inline-flex; align-items: center; justify-content: center;
-      min-height: 54px; padding: 0 32px;
-      border-radius: 999px;
-      background: #fff; color: #4f46e5;
-      font-size: 1rem; font-weight: 700; text-decoration: none;
-    }
-    a.cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
-    a.cta-quiet {
-      background: transparent; color: #fff;
-      border: 1.5px solid rgba(255, 255, 255, 0.55);
-      font-weight: 500;
-    }
-    footer { font-size: 0.82rem; opacity: 0.7; text-align: center; }
-  </style>
+  <link rel="stylesheet" href="/static/countdown.css?v={{ asset_version }}" />
 </head>
-<body>
+<body data-miniapp-url="{{ miniapp_url }}">
   <img src="{{ card_url }}" alt="{{ title }}" />
   {% if join_url %}<a class="cta" href="{{ join_url }}">{{ join_label }}</a>
   <a class="cta cta-quiet" href="{{ miniapp_url }}">{{ open_label }}</a>
@@ -56,13 +25,6 @@
   {% endif %}
   <footer>{{ made_with }} · {{ bot_handle }}</footer>
 
-  <script>
-    // Telegram's Android in-app browser identifies itself; iOS usually does
-    // not. So this is an opportunistic shortcut, never the only way through —
-    // the button above is what everyone else uses.
-    if (/Telegram/i.test(navigator.userAgent)) {
-      window.location.replace("{{ miniapp_url }}");
-    }
-  </script>
+  <script src="/static/countdown.js?v={{ asset_version }}" defer></script>
 </body>
 </html>

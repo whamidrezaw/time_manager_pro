@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from calendar import monthrange
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import jdatetime
@@ -31,14 +31,40 @@ DEFAULT_REMINDER_HOUR = 9
 DEFAULT_REMINDER_MINUTE = 0
 
 
-def safe_zoneinfo(tz_name: str | None) -> tuple[ZoneInfo, str]:
+def safe_zoneinfo(tz_name: str | None) -> tuple[tzinfo, str]:
+    """Resolve an IANA name, never raising.
+
+    The old fallback was ZoneInfo("UTC"), which sits outside the try and needs
+    the IANA database just like the name that already failed. On a host without
+    it (Windows with no tzdata package, a slim container) the "safe" path threw
+    and took the request or the worker down with it. timezone.utc is built into
+    Python and cannot fail.
+    """
     try:
         if tz_name:
             return ZoneInfo(tz_name), tz_name
     except (ZoneInfoNotFoundError, ValueError, KeyError):
         logger.warning("Invalid timezone received: %s", tz_name)
 
-    return ZoneInfo("UTC"), "UTC"
+    try:
+        return ZoneInfo("UTC"), "UTC"
+    except (ZoneInfoNotFoundError, ValueError, KeyError):
+        logger.error(
+            "IANA timezone database unavailable; falling back to fixed UTC. "
+            "Install the 'tzdata' package."
+        )
+        return timezone.utc, "UTC"
+
+
+def as_utc(value: datetime) -> datetime:
+    """Treat a naive datetime as UTC.
+
+    Mongo is opened with tz_aware=True, so reads are already aware. This stays
+    as the second line of defence: documents written before that flag existed
+    are still naive on disk, and .astimezone() on a naive value silently uses
+    the server's clock instead of the event's timezone.
+    """
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
 def to_jalali(date_iso: str) -> str:
@@ -51,11 +77,19 @@ def to_jalali(date_iso: str) -> str:
 
 
 def expire_for_repeat(anchor: datetime, repeat: str) -> datetime:
+    """When the document may be garbage-collected, counted from a reminder.
+
+    Every value is one full period plus at least 30 days of slack. The old
+    daily value was 2 days, and only a successful send pushed it forward, so
+    a worker outage longer than the gap let the TTL index delete the user's
+    events. Collection is housekeeping; it must never be the thing that
+    notices the worker is down.
+    """
     delta_map = {
         "none": timedelta(days=30),
-        "daily": timedelta(days=2),
-        "weekly": timedelta(days=10),
-        "monthly": timedelta(days=40),
+        "daily": timedelta(days=31),
+        "weekly": timedelta(days=37),
+        "monthly": timedelta(days=61),
         "yearly": timedelta(days=400),
     }
     return anchor + delta_map.get(repeat, timedelta(days=30))

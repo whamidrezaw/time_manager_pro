@@ -1,0 +1,20 @@
+# Development and CI only. Never installed on the server.
+#
+# Split out of requirements.txt so that `pip-audit --requirement
+# requirements.txt` audits what actually ships. pytest carries an open
+# advisory that cannot be cleared yet (pytest-asyncio 0.24.0 pins pytest<9),
+# and auditing it would make the gate red over code that never runs in
+# production.
+
+# ==================== TESTING ====================
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+# In-memory async MongoDB. Without it nothing below app/services is reachable
+# from a test, which is why every critical finding in the Batch 18 review sat
+# in code the suite never executed.
+mongomock-motor==0.0.36
+
+# ==================== QUALITY ====================
+ruff==0.8.4
+pip-audit==2.9.0

@@ -113,7 +113,17 @@ async def set_share_state(user_id: str, event_id: str, enabled: bool,
             {"_id": event["_id"], "user_id": user_id},
             {
                 "$set": {"public_enabled": False, "updated_at": now},
-                "$unset": {"public_token": "", "public_since": ""},
+                # share_token is the group invite link. Dropping only
+                # public_token killed the countdown page but left the join
+                # link working, so strangers could still be added to the
+                # event after the owner had taken it off the internet.
+                # Members who already joined keep their own copies; this
+                # stops new ones.
+                "$unset": {
+                    "public_token": "",
+                    "public_since": "",
+                    "share_token": "",
+                },
             },
         )
         logger.info("sharing disabled user_id=%s event_id=%s", user_id, event["_id"])

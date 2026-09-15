@@ -24,6 +24,7 @@ from app.schemas.requests import (
 from app.schemas.responses import EventOut
 from app.services.chats import scope_for, usable_destination
 from app.utils.dates import (
+    as_utc,
     build_lead_reminders,
     expire_for_repeat,
     first_schedule,
@@ -56,9 +57,7 @@ def next_occurrence_iso(doc: dict) -> str:
         return doc.get("date_iso", "")
 
     tz, _ = safe_zoneinfo(doc.get("tz_name"))
-    if event_ts.tzinfo is None:
-        event_ts = event_ts.replace(tzinfo=timezone.utc)
-    return event_ts.astimezone(tz).date().isoformat()
+    return as_utc(event_ts).astimezone(tz).date().isoformat()
 
 
 def serialize_event(doc: dict) -> EventOut:
@@ -241,7 +240,15 @@ def build_list_query(user_id: str, payload: ListEventsRequest) -> dict:
 
         # The old client-side search also matched the category label shown in
         # the UI, which is the stored value itself.
-        matched = sorted(c for c in VALID_CATEGORIES if term.lower() in c)
+        # Prefix first, because a bare substring made "e" match finance,
+        # general, health, other and travel — five of nine, so the list came
+        # back looking unfiltered. Substring is still allowed once the term is
+        # long enough to mean something.
+        needle = term.lower()
+        matched = sorted(
+            c for c in VALID_CATEGORIES
+            if c.startswith(needle) or (len(needle) >= 3 and needle in c)
+        )
         if matched:
             clauses.append({"category": {"$in": matched}})
 
@@ -294,8 +301,13 @@ async def add_event_for_user(
     # get_database. The limit is derived per user now, not a constant.
     from app.services.referrals import effective_event_limit
 
-    count = await events_coll.count_documents({"user_id": user_id})
-    if count >= await effective_event_limit(user_id, settings):
+    limit = await effective_event_limit(user_id, settings)
+
+    # Cheap fast path only. It is NOT the guarantee: count-then-insert leaves a
+    # window in which a second request passes the same check, so two concurrent
+    # saves could both get through. The real decision is made after the insert
+    # below, where the count can no longer be stale.
+    if await events_coll.count_documents({"user_id": user_id}) >= limit:
         raise HTTPException(status_code=400, detail="EVENT_LIMIT_REACHED")
 
     event_data = _normalize_event_input(payload, settings)
@@ -316,6 +328,27 @@ async def add_event_for_user(
     )
 
     result = await events_coll.insert_one(event_data)
+
+    # Now that the row exists the count includes it, so this cannot be raced.
+    # ObjectIds carry a timestamp and a counter, so sorting by _id gives every
+    # concurrent request the same answer about who is over the line: whoever
+    # inserted first keeps their event, and only the losers roll themselves
+    # back. No separate counter document, so nothing can drift out of step
+    # with the events themselves and lock a user out for good.
+    total = await events_coll.count_documents({"user_id": user_id})
+    if total > limit:
+        overflow = (
+            events_coll.find({"user_id": user_id}, {"_id": 1})
+            .sort("_id", -1)
+            .limit(total - limit)
+        )
+        losers = {doc["_id"] async for doc in overflow}
+        if result.inserted_id in losers:
+            await events_coll.delete_one({"_id": result.inserted_id})
+            logger.warning(
+                "event limit raced: user_id=%s rolled back %s", user_id, result.inserted_id
+            )
+            raise HTTPException(status_code=400, detail="EVENT_LIMIT_REACHED")
     logger.info("event inserted user_id=%s event_id=%s", user_id, result.inserted_id)
 
     # Batch 12a: an invite only counts once the invited person has actually
@@ -368,9 +401,17 @@ async def edit_event_for_user(
 
         event_data = {k: v for k, v in event_data.items() if k not in SHARED_FIELDS}
 
+    update: dict = {"$set": event_data}
+    if "repeat" in event_data and "expire_at" not in event_data:
+        # A recurring event edited into a one-off carries no expire_at, and
+        # $set alone left the old one in place: the TTL index then deleted a
+        # perfectly live event on the old schedule. Members never reach this
+        # branch because repeat is a shared field and is stripped above.
+        update["$unset"] = {"expire_at": ""}
+
     await events_coll.update_one(
         {"_id": oid, "user_id": user_id},
-        {"$set": event_data},
+        update,
     )
 
     if existing.get("share_role") == "owner":

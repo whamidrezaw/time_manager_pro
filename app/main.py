@@ -16,6 +16,7 @@ from app.db import (
     ensure_indexes,
     stop_expiring_one_off_events,
 )
+from app.middleware import CSP, SecurityHeadersMiddleware
 from app.routes.calendar import router as calendar_router
 from app.routes.chats import router as chats_router
 from app.routes.events import router as events_router
@@ -82,6 +83,16 @@ app = FastAPI(
     title=settings.app_name,
     debug=settings.app_debug,
     lifespan=lifespan,
+)
+
+# Before the routes, so it also covers /static and any error response the
+# framework produces on its own.
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    policy=(
+        CSP if settings.content_security_policy is None
+        else settings.content_security_policy
+    ),
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

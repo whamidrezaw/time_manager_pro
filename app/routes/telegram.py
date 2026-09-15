@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import logging
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -25,7 +26,9 @@ async def telegram_webhook(
     # Confirms the request genuinely came from Telegram, not just anyone who
     # found this URL. Telegram echoes this header back on every webhook call
     # when a secret_token was set via set_webhook (see app/main.py lifespan).
-    if x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
+    if not hmac.compare_digest(
+        x_telegram_bot_api_secret_token or "", settings.telegram_webhook_secret
+    ):
         raise HTTPException(status_code=403, detail="BAD_SECRET_TOKEN")
 
     payload = await request.json()
