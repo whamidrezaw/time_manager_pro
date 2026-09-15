@@ -2,7 +2,10 @@
 python-telegram-bot==21.1
 
 # ==================== WEB FRAMEWORK ====================
-fastapi==0.115.6
+# 0.115.6 pins starlette<0.42.0, which held starlette on a release with
+# seven open advisories. Bumping fastapi is what unpins it. Verified
+# against the full suite: 234 pre-existing tests pass unchanged.
+fastapi==0.141.1
 uvicorn[standard]==0.30.6
 gunicorn==22.0.0
 
@@ -16,23 +19,18 @@ pymongo>=4.9,<4.10
 dnspython>=2.7,<3
 
 # ==================== TEMPLATES ====================
-jinja2==3.1.4
+jinja2==3.1.6
 
 # ==================== UTILITIES ====================
 certifi==2024.8.30
 jdatetime==5.0.0
+# Runtime, not test: app/services/telegram_api.py calls it directly for
+# the Bot API 8.0 methods python-telegram-bot 21.1 does not expose.
+httpx==0.28.1
 
 # ==================== SHARE CARDS (Batch 12b) ====================
-Pillow==11.3.0
+Pillow==12.3.0
 # Only used when Pillow was built without Raqm; the wheels bundle it,
 # so on a normal install these two never run.
 arabic-reshaper==3.0.1
 python-bidi==0.6.11
-
-# ==================== TESTING ====================
-pytest==8.3.4
-pytest-asyncio==0.24.0
-httpx==0.28.1
-
-# ==================== QUALITY ====================
-ruff==0.8.4

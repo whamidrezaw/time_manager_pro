@@ -1,0 +1,455 @@
+"""One test per finding from the Batch 18 review.
+
+Every test here is expected to FAIL against current main. That is the point:
+a fix is only proven when a test that failed before it starts passing after it.
+Each docstring names the finding it pins down.
+"""
+from __future__ import annotations
+
+import asyncio
+import inspect
+import time
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from tests.harness import FakeBot, install_fake_db, seed_event, teardown_fake_db, utc
+
+
+def as_utc(value: datetime) -> datetime:
+    """Mongo hands back naive UTC unless the client is tz_aware."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+@pytest.fixture(autouse=True)
+def fake_db():
+    install_fake_db()
+    yield
+    teardown_fake_db()
+
+
+@pytest.fixture
+def settings():
+    from app.config import get_settings
+
+    return get_settings()
+
+
+class FailingUpdates:
+    """Wraps a collection and makes the first N update_one calls explode."""
+
+    def __init__(self, inner, fail_times: int):
+        self._inner = inner
+        self._fail_times = fail_times
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    async def update_one(self, *args, **kwargs):
+        if self._fail_times > 0:
+            self._fail_times -= 1
+            raise RuntimeError("mongo write failed")
+        return await self._inner.update_one(*args, **kwargs)
+
+
+# ── CRITICAL 1 — stale expire_at after an edit ──────────────────────────────
+
+async def test_editing_recurring_to_one_off_clears_expire_at(settings):
+    """A yearly event edited into a one-off must not keep its TTL marker.
+
+    It currently does, so the TTL index deletes the user's event on schedule.
+    """
+    from app.schemas.requests import EditEventRequest
+    from app.services.events import edit_event_for_user
+    from app.utils.dates import expire_for_repeat
+
+    event = await seed_event(
+        repeat="yearly",
+        expire_at=expire_for_repeat(utc(days=7), "yearly"),
+    )
+
+    await edit_event_for_user(
+        "1001",
+        EditEventRequest(
+            initData="x",
+            event_id=str(event["_id"]),
+            title="Dentist",
+            date="2026-09-20",
+            timezone="Europe/Berlin",
+            repeat="none",
+        ),
+        settings,
+    )
+
+    from app.db import get_events_collection
+
+    fresh = await get_events_collection().find_one({"_id": event["_id"]})
+    assert "expire_at" not in fresh, (
+        "one-off event still carries expire_at=%r — the TTL index will delete it"
+        % fresh.get("expire_at")
+    )
+
+
+# ── CRITICAL 2 — TTL doubles as liveness ────────────────────────────────────
+
+def test_ttl_grace_survives_a_worker_outage():
+    """expire_at must outlive a realistic worker outage.
+
+    A daily event expires 2 days after its next reminder, and only a successful
+    send pushes it forward. The README says the Actions schedule gets dropped,
+    so the TTL becomes a delete-user-data-on-outage switch.
+    """
+    from app.utils.dates import expire_for_repeat
+
+    anchor = datetime(2026, 9, 13, tzinfo=timezone.utc)
+    for repeat in ("daily", "weekly", "monthly", "yearly"):
+        grace = expire_for_repeat(anchor, repeat) - anchor
+        assert grace >= timedelta(days=30), (
+            f"{repeat}: only {grace.days}d of grace; a {grace.days + 1}d outage "
+            "deletes the user's events"
+        )
+
+
+# ── CRITICAL 3 — send and state update are not atomic ───────────────────────
+
+async def test_failed_state_write_does_not_resend(settings, monkeypatch):
+    """If the post-send update throws, the reminder must not be sent twice."""
+    from app.db import get_events_collection
+    from app.services import reminders as reminders_module
+
+    await seed_event()
+    bot = FakeBot()
+
+    real = get_events_collection()
+    monkeypatch.setattr(
+        reminders_module, "get_events_collection", lambda: FailingUpdates(real, 1)
+    )
+    await reminders_module.process_due_reminders(bot, settings)
+
+    monkeypatch.setattr(reminders_module, "get_events_collection", lambda: real)
+    await reminders_module.recover_stale_processing(settings)
+    await reminders_module.process_due_reminders(bot, settings)
+
+    assert len(bot.sent) == 1, (
+        f"reminder delivered {len(bot.sent)} times — the user gets duplicates "
+        "whenever a state write fails after a successful send"
+    )
+
+
+# ── CRITICAL 4 — "failed" is a terminal state ───────────────────────────────
+
+async def test_event_recovers_after_a_telegram_outage(settings):
+    """Five transient failures must not silence an event for ever."""
+    from app.db import get_events_collection
+    from app.services.reminders import process_due_reminders, recover_stale_processing
+
+    event = await seed_event()
+
+    broken = FakeBot(fail_forever=True)
+    for _ in range(6):
+        await process_due_reminders(broken, settings)
+
+    status = (await get_events_collection().find_one({"_id": event["_id"]}))["notify_status"]
+    assert status == "failed", f"precondition: expected 'failed', got {status!r}"
+
+    working = FakeBot()
+    await recover_stale_processing(settings)
+    await process_due_reminders(working, settings)
+
+    assert len(working.sent) == 1, (
+        "the event never fires again after the outage — 'failed' has no recovery path"
+    )
+
+
+# ── MAJOR 5 — retries have no backoff ───────────────────────────────────────
+
+async def test_retry_backs_off(settings):
+    """A failed send must push next_notify_at forward, not retry immediately."""
+    from app.db import get_events_collection
+    from app.services.reminders import process_due_reminders
+
+    event = await seed_event()
+    before = event["next_notify_at"]
+
+    await process_due_reminders(FakeBot(fail_forever=True), settings)
+
+    fresh = await get_events_collection().find_one({"_id": event["_id"]})
+    after = as_utc(fresh["next_notify_at"])
+
+    assert after > as_utc(before), (
+        "next_notify_at unchanged after a failure — the next pass retries "
+        "instantly and burns all five attempts in about two minutes"
+    )
+
+
+# ── MAJOR 6 — the health metric measures the wrong thing ────────────────────
+
+async def test_sending_a_reminder_touches_updated_at(settings):
+    """measure() counts updated_at as 'sent today', so the send must write it."""
+    from app.db import get_events_collection
+    from app.services.reminders import process_due_reminders
+
+    event = await seed_event()
+    before = event["updated_at"]
+
+    await process_due_reminders(FakeBot(), settings)
+
+    fresh = await get_events_collection().find_one({"_id": event["_id"]})
+    after = as_utc(fresh["updated_at"])
+
+    assert after > as_utc(before), (
+        "process_due_reminders never writes updated_at, so touched_last_24h "
+        "actually counts user edits rather than reminders sent"
+    )
+
+
+# ── CRITICAL 7 — card rendering blocks the event loop ───────────────────────
+
+def test_card_render_is_fast_enough_to_serve():
+    """317ms of CPU on a public, unauthenticated endpoint is a DoS lever."""
+    from app.services.cards import render_event_card
+
+    event = {
+        "title": "Anniversary",
+        "date_iso": "2026-12-31",
+        "date_jalali": "1405/10/10",
+        "category": "family",
+        "all_day": True,
+        "tz_name": "Europe/Berlin",
+        "event_ts_utc": utc(days=100),
+        "bot_handle": "@Timemanager2026_bot",
+    }
+    render_event_card(event, "en")  # warm up
+
+    start = time.perf_counter()
+    render_event_card(event, "en")
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    assert elapsed_ms < 80, f"render took {elapsed_ms:.0f}ms"
+
+
+async def test_card_endpoint_yields_to_the_event_loop():
+    """Other requests must keep being served while a card renders."""
+    from app.routes.share import public_card
+    from app.services.sharing import generate_public_token
+
+    token = generate_public_token()
+    await seed_event(public_token=token, public_enabled=True)
+
+    ticks = 0
+
+    async def heartbeat():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.005)
+            ticks += 1
+
+    beat = asyncio.create_task(heartbeat())
+    await asyncio.sleep(0.02)
+    ticks = 0
+    await public_card(token)
+    beat.cancel()
+
+    assert ticks >= 5, (
+        f"the loop ticked {ticks} times during the render — every other request, "
+        "including the Telegram webhook, was frozen"
+    )
+
+
+# ── CRITICAL 8 — webhook secret compared with != ────────────────────────────
+
+def test_webhook_secret_uses_constant_time_comparison():
+    """routes/tasks.py gets this right; routes/telegram.py does not."""
+    from app.routes.telegram import telegram_webhook
+
+    source = inspect.getsource(telegram_webhook)
+    assert "compare_digest" in source, (
+        "webhook secret compared with != — use hmac.compare_digest, as "
+        "app/routes/tasks.py already does"
+    )
+
+
+# ── MAJOR 9 — event limit is TOCTOU ─────────────────────────────────────────
+
+async def test_event_limit_holds_under_concurrent_saves(settings):
+    """count_documents then insert_one, with nothing in between."""
+    from app.db import get_events_collection
+    from app.schemas.requests import AddEventRequest
+    from app.services.events import add_event_for_user
+
+    limit = settings.event_limit_base
+    for index in range(limit - 1):
+        await seed_event(title=f"filler {index}")
+
+    payload = AddEventRequest(
+        initData="x", title="Race", date="2026-10-01", timezone="UTC"
+    )
+    await asyncio.gather(
+        *(add_event_for_user("1001", payload, settings) for _ in range(5)),
+        return_exceptions=True,
+    )
+
+    total = await get_events_collection().count_documents({"user_id": "1001"})
+    assert total <= limit, f"{total} events stored against a limit of {limit}"
+
+
+# ── MAJOR 10 — revoking a share leaves the join link alive ──────────────────
+
+async def test_disabling_sharing_also_kills_the_invite_link(settings):
+    """The UI promises the old link stops working. share_token survives."""
+    from app.services.share_group import find_by_token, start_group
+    from app.services.sharing import set_share_state
+
+    event = await seed_event()
+    group = await start_group("1001", event["_id"], settings)
+
+    await set_share_state("1001", str(event["_id"]), False, settings)
+
+    assert await find_by_token(group["token"]) is None, (
+        "the invite token still resolves after sharing was switched off — "
+        "strangers can still join the event"
+    )
+
+
+# ── MAJOR 11 — the reminders contract contradicts itself ────────────────────
+
+def test_stored_reminders_are_accepted_back_by_the_api(settings):
+    """What EventOut returns must be valid input to AddEventRequest."""
+    from pydantic import ValidationError
+
+    from app.schemas.requests import AddEventRequest
+    from app.services.events import _normalize_event_input
+
+    saved = _normalize_event_input(
+        AddEventRequest(
+            initData="x",
+            title="Instalment",
+            date="2026-12-01",
+            timezone="UTC",
+            lead_repeat="weekly",
+        ),
+        settings,
+    )
+
+    try:
+        AddEventRequest(
+            initData="x",
+            title="Instalment",
+            date="2026-12-01",
+            timezone="UTC",
+            reminders=saved["reminders"],
+        )
+    except ValidationError as exc:
+        pytest.fail(
+            f"server stores {len(saved['reminders'])} reminder specs but refuses "
+            f"them as input (cap is 3): {exc.errors()[0]['msg']}"
+        )
+
+
+# ── MAJOR 12 — run_once hides failure from the dead-man's switch ────────────
+
+async def test_run_once_exits_non_zero_when_processing_fails(monkeypatch):
+    """healthchecks.io pings on `if: success()`. Exit 0 means 'all fine'."""
+    from app.db import connect_to_mongo
+    from worker import run_once
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("mongo unreachable mid-run")
+
+    async def noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(run_once, "process_due_reminders", boom)
+    monkeypatch.setattr(run_once, "connect_to_mongo", noop)
+    monkeypatch.setattr(run_once, "ensure_indexes", noop)
+    monkeypatch.setattr(run_once, "close_mongo_connection", noop)
+    assert connect_to_mongo is not None  # keep the import meaningful
+
+    with pytest.raises(SystemExit) as exit_info:
+        await run_once.main()
+
+    assert exit_info.value.code != 0, (
+        "run_once swallowed the failure and exited 0 — the healthcheck ping "
+        "fires and the dead-man's switch reports a dead worker as alive"
+    )
+
+
+# ── MAJOR 13 — one-letter searches match almost everything ──────────────────
+
+def test_single_letter_search_is_not_a_category_wildcard():
+    """'e' substring-matches six of the nine category names."""
+    from app.schemas.requests import ListEventsRequest
+    from app.services.events import build_list_query
+
+    query = build_list_query("1001", ListEventsRequest(initData="x", q="e"))
+    categories: list[str] = []
+    for clause in query.get("$or", []):
+        if "category" in clause:
+            categories = clause["category"]["$in"]
+
+    assert len(categories) <= 2, (
+        f"typing 'e' matches {len(categories)} categories {categories} — "
+        "the result list looks unfiltered"
+    )
+
+
+# ── CRITICAL 14 — naive datetimes from Mongo follow the SERVER clock ────────
+
+def test_finished_series_ends_on_the_same_day_on_any_host():
+    """expand_occurrences calls .astimezone() on a value Mongo returns naive.
+
+    A naive datetime is interpreted as the host's local time, so the same event
+    draws a different last day depending on the server's TZ. DEBUGGING.md rule
+    4 says everything is computed in the event's own zone, never the server's.
+    """
+    import os
+    import time as time_module
+    from datetime import date
+
+    from app.utils.occurrences import expand_occurrences
+
+    event = {
+        "date_iso": "2025-12-28",
+        "tz_name": "Asia/Tehran",
+        "all_day": True,
+        "repeat": "daily",
+        "notify_status": "done",
+        "event_ts_utc": datetime(2026, 1, 1, 23, 30),  # naive, as Mongo returns it
+    }
+
+    original = os.environ.get("TZ")
+    results = {}
+    try:
+        for zone in ("UTC", "Asia/Tehran"):
+            os.environ["TZ"] = zone
+            time_module.tzset()
+            results[zone] = expand_occurrences(event, date(2025, 12, 28), date(2026, 1, 5))
+    finally:
+        if original is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = original
+        time_module.tzset()
+
+    assert results["UTC"] == results["Asia/Tehran"], (
+        "the calendar drew %d days on a UTC host and %d on a Tehran host — "
+        "the host clock is leaking into the event's own timezone"
+        % (len(results["UTC"]), len(results["Asia/Tehran"]))
+    )
+
+
+def test_mongo_client_returns_timezone_aware_datetimes():
+    """One flag removes the whole class of bug above.
+
+    Four call sites already patch tzinfo back on by hand; occurrences.py:84
+    forgets to, which is the bug the test above pins. tz_aware=True makes all
+    four patches unnecessary and the fifth unnecessary to remember.
+    """
+    import inspect
+
+    from app import db
+
+    assert "tz_aware" in inspect.getsource(db.connect_to_mongo), (
+        "AsyncIOMotorClient is built without tz_aware=True, so every datetime "
+        "read back from Mongo is naive"
+    )

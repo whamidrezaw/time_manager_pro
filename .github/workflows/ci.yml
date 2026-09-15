@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, "fix/**"]
   pull_request:
     branches: [main]
 jobs:
@@ -19,7 +19,16 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Audit production dependencies
+        # Production only. requirements-dev.txt is deliberately not
+        # audited: pytest never runs on the server, and pytest-asyncio
+        # pins it below the release that fixes its advisory. Blocking
+        # rather than advisory, because this gate is green today and a
+        # gate that starts red is one everyone learns to ignore.
+        run: pip-audit --requirement requirements.txt
       - name: Lint (ruff)
         run: ruff check .
       - name: Run tests
