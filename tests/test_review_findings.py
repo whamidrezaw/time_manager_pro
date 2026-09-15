@@ -273,30 +273,49 @@ def test_card_render_is_fast_enough_to_serve():
 
 
 async def test_card_endpoint_yields_to_the_event_loop():
-    """Other requests must keep being served while a card renders."""
+    """Other requests must keep being served while a card renders.
+
+    Measured as the longest single stall of the event loop, not as a count of
+    timer ticks. asyncio.sleep() granularity is about 1ms on Linux and about
+    15.6ms on Windows, so counting ticks over a ~55ms render measures the
+    host's timer far more than it measures whether the loop was blocked: the
+    same passing code scored 11 on one machine and 3 on another. The watchdog
+    below uses sleep(0), which involves no timer at all and runs on every pass
+    of the loop, so the signal is the same everywhere.
+    """
     from app.routes.share import public_card
     from app.services.sharing import generate_public_token
 
     token = generate_public_token()
     await seed_event(public_token=token, public_enabled=True)
 
-    ticks = 0
+    stalls: list[float] = []
 
-    async def heartbeat():
-        nonlocal ticks
+    async def watchdog():
+        previous = time.perf_counter()
         while True:
-            await asyncio.sleep(0.005)
-            ticks += 1
+            await asyncio.sleep(0)
+            current = time.perf_counter()
+            stalls.append(current - previous)
+            previous = current
 
-    beat = asyncio.create_task(heartbeat())
-    await asyncio.sleep(0.02)
-    ticks = 0
+    watch = asyncio.create_task(watchdog())
+    await asyncio.sleep(0)
+    stalls.clear()
+
+    started = time.perf_counter()
     await public_card(token)
-    beat.cancel()
+    elapsed = time.perf_counter() - started
+    watch.cancel()
 
-    assert ticks >= 3, (
-        f"the loop ticked {ticks} times during the render — every other request, "
-        "including the Telegram webhook, was frozen"
+    # No observation at all means the loop never got control: the stall was
+    # the whole render.
+    longest = max(stalls, default=elapsed)
+
+    assert longest < elapsed / 2, (
+        f"the loop went {longest * 1000:.0f}ms without running anything while a "
+        f"{elapsed * 1000:.0f}ms render was in progress — every other request, "
+        "including the Telegram webhook, was frozen for that whole time"
     )
 
 
@@ -566,3 +585,69 @@ def test_cached_backdrop_is_not_shared_between_cards():
 
     assert first != second, "two different events rendered byte-identical cards"
     assert first == third, "the same event rendered differently on a second call"
+
+
+# ── Step 4 guards ───────────────────────────────────────────────────────────
+
+def test_reminder_round_trip_is_stable(settings):
+    """Saving what EventOut returned must not shrink the schedule.
+
+    Ignoring the generated lead specs is only correct because they are rebuilt
+    from lead_repeat on every save. If that ever stops being true, an edit
+    would quietly drop twelve reminders and this catches it.
+    """
+    from app.schemas.requests import AddEventRequest
+    from app.services.events import _normalize_event_input
+
+    common = dict(
+        initData="x", title="Instalment", date="2026-12-01",
+        timezone="UTC", lead_repeat="weekly",
+    )
+    # 07:30 rather than the 09:00 default, so that losing the user's own spec
+    # is visible. With the default the legacy hour/minute fallback rebuilds an
+    # identical one and the test cannot tell the difference.
+    chosen = [{"mode": "absolute", "hour": 7, "minute": 30}]
+
+    first = _normalize_event_input(
+        AddEventRequest(**common, reminders=chosen), settings
+    )
+    second = _normalize_event_input(
+        AddEventRequest(**common, reminders=first["reminders"]), settings
+    )
+
+    # Comparing first with second alone proves nothing: both come out of the
+    # same code, so a filter that drops everything is self-consistent. Assert
+    # the user's own choice survived.
+    assert {"mode": "absolute", "hour": 7, "minute": 30} in first["reminders"], (
+        f"the client's own reminder was dropped on save: {first['reminders'][:2]}"
+    )
+    assert len(second["reminders"]) == len(first["reminders"]), (
+        f"round trip turned {len(first['reminders'])} reminders into "
+        f"{len(second['reminders'])}"
+    )
+    assert second["reminders"] == first["reminders"]
+
+
+async def test_revoking_sharing_leaves_existing_members_alone(settings):
+    """Killing the invite link must not delete what members already have.
+
+    Revocation stops new joins. Taking a copy away from someone who already
+    joined would be a different and much ruder thing to do.
+    """
+    from app.db import get_events_collection
+    from app.services.share_group import join_group, member_count, start_group
+    from app.services.sharing import set_share_state
+
+    event = await seed_event()
+    group = await start_group("1001", event["_id"], settings)
+    await join_group("2002", group["token"], "Europe/Berlin", settings)
+
+    owner = await get_events_collection().find_one({"_id": event["_id"]})
+    share_id = owner["share_id"]
+    assert await member_count(share_id) == 1, "precondition: the join did not land"
+
+    await set_share_state("1001", str(event["_id"]), False, settings)
+
+    assert await member_count(share_id) == 1, (
+        "revoking the link removed a member who had already joined"
+    )

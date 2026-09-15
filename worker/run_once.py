@@ -43,6 +43,7 @@ async def main() -> None:
     await ensure_indexes(settings)
     logger.info("run_once: connected. processing reminders...")
 
+    exit_code = 0
     try:
         async with Bot(token=settings.bot_token) as bot:
             processed = await asyncio.wait_for(
@@ -52,10 +53,18 @@ async def main() -> None:
             logger.info("run_once: done. processed=%s reminders.", processed)
     except asyncio.TimeoutError:
         logger.error("run_once: reminder processing timed out.")
+        exit_code = 1
     except Exception as exc:
         logger.error("run_once: error during processing: %s", exc)
+        exit_code = 1
     finally:
         await close_mongo_connection()
+
+    if exit_code:
+        # reminder.yml pings healthchecks.io on `if: success()`. Exiting 0
+        # after a failed run made the dead-man's switch report a dead worker
+        # as alive, which is the one thing it exists to prevent.
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":
