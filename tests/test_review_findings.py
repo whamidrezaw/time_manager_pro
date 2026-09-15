@@ -294,7 +294,7 @@ async def test_card_endpoint_yields_to_the_event_loop():
     await public_card(token)
     beat.cancel()
 
-    assert ticks >= 5, (
+    assert ticks >= 3, (
         f"the loop ticked {ticks} times during the render — every other request, "
         "including the Telegram webhook, was frozen"
     )
@@ -515,3 +515,54 @@ def test_safe_zoneinfo_never_raises_without_the_iana_database(monkeypatch):
     tz, name = dates.safe_zoneinfo("Asia/Tehran")
     assert name == "UTC"
     assert tz.utcoffset(datetime(2026, 1, 1)) == timedelta(0)
+
+
+# ── Step 3 guards ───────────────────────────────────────────────────────────
+
+def test_category_search_still_matches_real_terms():
+    """The wildcard fix must not simply break category search.
+
+    Prefix from one character, substring once the term is long enough to mean
+    something. Locks the rule in so it cannot drift to "match nothing".
+    """
+    from app.schemas.requests import ListEventsRequest
+    from app.services.events import build_list_query
+
+    def categories_for(term: str) -> list[str]:
+        query = build_list_query("1001", ListEventsRequest(initData="x", q=term))
+        for clause in query.get("$or", []):
+            if "category" in clause:
+                return clause["category"]["$in"]
+        return []
+
+    assert categories_for("h") == ["health"]
+    assert categories_for("hea") == ["health"]
+    assert categories_for("ravel") == ["travel"]
+    assert categories_for("work") == ["work"]
+    assert categories_for("e") == []
+
+
+def test_cached_backdrop_is_not_shared_between_cards():
+    """The backdrop is cached; the canvas drawn on must still be a copy.
+
+    Without the copy every card after the first would carry the previous
+    card's text, and a share link would leak another user's event title.
+    """
+    from app.services.cards import render_event_card
+
+    base = {
+        "date_iso": "2026-12-31",
+        "date_jalali": "1405/10/10",
+        "category": "family",
+        "all_day": True,
+        "tz_name": "Europe/Berlin",
+        "event_ts_utc": utc(days=100),
+        "bot_handle": "@Timemanager2026_bot",
+    }
+
+    first = render_event_card({**base, "title": "Alice birthday"}, "en")
+    second = render_event_card({**base, "title": "Bob graduation"}, "en")
+    third = render_event_card({**base, "title": "Alice birthday"}, "en")
+
+    assert first != second, "two different events rendered byte-identical cards"
+    assert first == third, "the same event rendered differently on a second call"

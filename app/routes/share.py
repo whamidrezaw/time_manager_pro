@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.templating import Jinja2Templates
 from pydantic import Field
 
@@ -108,7 +109,11 @@ async def public_card(token: str) -> Response:
 
     settings = get_settings()
     try:
-        png = render_event_card(
+        # Rendering is pure CPU. Called directly from an async handler it froze
+        # the whole worker for the duration, including the Telegram webhook and
+        # the reminder cron, on a public endpoint that needs no credentials.
+        png = await run_in_threadpool(
+            render_event_card,
             {**event, "bot_handle": f"@{settings.telegram_bot_username}"},
             event_language(event),
         )

@@ -240,7 +240,15 @@ def build_list_query(user_id: str, payload: ListEventsRequest) -> dict:
 
         # The old client-side search also matched the category label shown in
         # the UI, which is the stored value itself.
-        matched = sorted(c for c in VALID_CATEGORIES if term.lower() in c)
+        # Prefix first, because a bare substring made "e" match finance,
+        # general, health, other and travel — five of nine, so the list came
+        # back looking unfiltered. Substring is still allowed once the term is
+        # long enough to mean something.
+        needle = term.lower()
+        matched = sorted(
+            c for c in VALID_CATEGORIES
+            if c.startswith(needle) or (len(needle) >= 3 and needle in c)
+        )
         if matched:
             clauses.append({"category": {"$in": matched}})
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timezone
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -39,7 +40,9 @@ def fonts_available() -> bool:
     return all((FONT_DIR / f"Vazirmatn-{w}.ttf").exists() for w in ("Medium", "Bold", "Black"))
 
 
+@lru_cache(maxsize=64)
 def _font(weight: str, size: int) -> ImageFont.FreeTypeFont:
+    """Cached: a card asks for eight faces and every one was read from disk."""
     path = FONT_DIR / f"Vazirmatn-{weight}.ttf"
     if not path.exists():
         raise FontsMissing(f"missing {path}")
@@ -157,14 +160,26 @@ def _headline(event: dict, language: str, rtl: bool) -> tuple[str, str, int]:
     return _digits(days, rtl), t("card_days_left", language), 268
 
 
+@lru_cache(maxsize=1)
+def _backdrop() -> Image.Image:
+    """Gradient plus the two glows, built once.
+
+    Nothing in it depends on the event, yet it was rebuilt per request, and
+    the two GaussianBlur(40) passes over a 1080x1080 RGBA layer cost about
+    125ms of that.
+    """
+    canvas = _gradient().convert("RGBA")
+    _glow(canvas, 940, 110, 280, 30)
+    _glow(canvas, 90, 1000, 220, 22)
+    return canvas
+
+
 def render_event_card(event: dict, language: str = "en") -> bytes:
     """A square PNG of one event, ready to be posted into a chat."""
     rtl = language == "fa"
     kw = _kwargs(rtl)
 
-    canvas = _gradient().convert("RGBA")
-    _glow(canvas, 940, 110, 280, 30)
-    _glow(canvas, 90, 1000, 220, 22)
+    canvas = _backdrop().copy()
 
     # A translucent panel over the gradient — the same material the Mini App
     # uses for its hero and sheets, so a shared card is recognisably the same
@@ -247,5 +262,7 @@ def render_event_card(event: dict, language: str = "en") -> bytes:
                fill=(255, 255, 255, 215), anchor="mm")
 
     buffer = BytesIO()
-    canvas.convert("RGB").save(buffer, "PNG", optimize=True)
+    # optimize=True re-ran the encoder searching for a smaller result: about
+    # 140ms for roughly 2KB. compress_level=6 is Pillow's default effort.
+    canvas.convert("RGB").save(buffer, "PNG", compress_level=6)
     return buffer.getvalue()
