@@ -130,7 +130,19 @@ async def public_card(request: Request, token: str) -> Response:
         logger.error("static/fonts is empty — the share card cannot be rendered")
         raise HTTPException(status_code=503, detail="CARD_UNAVAILABLE") from None
 
-    return Response(content=png, media_type="image/png", headers={"Cache-Control": CARD_CACHE})
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            "Cache-Control": CARD_CACHE,
+            # The middleware defaults every response to same-site, which is
+            # right for the app and wrong for this one route: the card exists
+            # to be embedded somewhere else. same-site would have told every
+            # browser to refuse it on any other origin, which is the opposite
+            # of what a share card is for.
+            "Cross-Origin-Resource-Policy": "cross-origin",
+        },
+    )
 
 
 @router.get("/c/{token}")

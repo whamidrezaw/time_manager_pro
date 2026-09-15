@@ -886,3 +886,60 @@ async def test_countdown_page_renders_with_its_external_assets(settings):
     root = __import__("pathlib").Path(__file__).resolve().parents[1]
     assert (root / "static" / "countdown.css").exists()
     assert (root / "static" / "countdown.js").exists()
+
+
+# ── Found in the pre-merge diff review ─────────────────────────────────────
+
+async def test_share_card_can_be_embedded_cross_origin(settings):
+    """The card is the viral surface; same-site would block it everywhere else.
+
+    The security middleware defaults every response to
+    Cross-Origin-Resource-Policy: same-site. Correct for the app, wrong for
+    this one route: a browser would refuse to render the card on any page that
+    is not ours, which is the whole point of a share link.
+    """
+    from app.routes.share import public_card
+    from app.services.sharing import generate_public_token
+
+    token = generate_public_token()
+    await seed_event(public_token=token, public_enabled=True)
+
+    response = await public_card(fake_request(f"/c/{token}/card.png"), token)
+
+    assert response.headers.get("Cross-Origin-Resource-Policy") == "cross-origin", (
+        "the card inherited the app-wide same-site policy and cannot be "
+        "embedded anywhere else"
+    )
+
+
+def test_asset_version_covers_every_shipped_css_and_js():
+    """A hand-written list falls behind; this one already had.
+
+    countdown.css and countdown.js were added without being added to the list,
+    so an edit to either would have kept serving the cached copy.
+    """
+    import hashlib
+    from pathlib import Path
+
+    from app.routes.web import _compute_asset_version
+
+    static = Path(__file__).resolve().parents[1] / "static"
+    shipped = sorted(static.glob("*.css")) + sorted(static.glob("*.js"))
+    assert len(shipped) >= 7, f"expected the front-end files, found {shipped}"
+
+    before = _compute_asset_version()
+
+    # Touch each file in turn; every one must move the version.
+    for path in shipped:
+        original = path.read_bytes()
+        try:
+            path.write_bytes(original + b"\n/* cache-busting probe */\n")
+            assert _compute_asset_version() != before, (
+                f"editing {path.name} does not change the asset version, so "
+                "browsers would keep serving the copy they already have"
+            )
+        finally:
+            path.write_bytes(original)
+
+    assert _compute_asset_version() == before
+    assert hashlib.sha256  # the digest is content-based, not mtime-based
