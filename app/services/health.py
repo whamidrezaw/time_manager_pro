@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.config import Settings, get_settings
 from app.db import get_events_collection
+from app.utils.dates import as_utc
 
 logger = logging.getLogger("tm_pro.health")
 
@@ -49,9 +50,7 @@ async def measure(settings: Settings | None = None) -> dict:
     )
     worst_minutes = 0
     if worst and worst.get("next_notify_at"):
-        due = worst["next_notify_at"]
-        if due.tzinfo is None:
-            due = due.replace(tzinfo=timezone.utc)
+        due = as_utc(worst["next_notify_at"])
         worst_minutes = int((now - due).total_seconds() // 60)
 
     return {

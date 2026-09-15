@@ -41,7 +41,8 @@ class FakeBot:
 
 def install_fake_db() -> AsyncMongoMockClient:
     """Point app.db at an in-memory Mongo for the duration of one test."""
-    client = AsyncMongoMockClient()
+    # tz_aware mirrors app/db.py, so tests see what production sees.
+    client = AsyncMongoMockClient(tz_aware=True)
     app_db._client = client
     app_db._database = client["time_manager_pro_test"]
     return client

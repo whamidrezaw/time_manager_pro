@@ -9,6 +9,7 @@ from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from app.config import Settings, get_settings
 from app.db import get_events_collection
 from app.utils.dates import (
+    as_utc,
     earliest_fire,
     expire_for_repeat,
     next_schedule,
@@ -200,9 +201,7 @@ async def process_due_reminders(
 
             repeat = evt.get("repeat", "none")
             tz, _ = safe_zoneinfo(evt.get("tz_name", "UTC"))
-            occurrence = evt.get("event_ts_utc", now)
-            if occurrence.tzinfo is None:
-                occurrence = occurrence.replace(tzinfo=timezone.utc)
+            occurrence = as_utc(evt.get("event_ts_utc") or now)
 
             if repeat != "none":
                 specs = event_reminder_specs(evt)

@@ -54,6 +54,10 @@ async def connect_to_mongo(settings: Settings | None = None) -> AsyncIOMotorData
     _client = AsyncIOMotorClient(
         settings.mongo_uri,
         tlsCAFile=certifi.where(),
+        # Without this every datetime read back is naive. A naive datetime
+        # passed to .astimezone() is interpreted as the SERVER's local time,
+        # which breaks DEBUGGING.md rule 4 the moment the host is not UTC.
+        tz_aware=True,
     )
     _database = _client[settings.mongo_db_name]
 

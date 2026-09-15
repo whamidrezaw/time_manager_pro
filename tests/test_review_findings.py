@@ -363,6 +363,9 @@ async def test_run_once_exits_non_zero_when_processing_fails(monkeypatch):
     monkeypatch.setattr(run_once, "connect_to_mongo", noop)
     monkeypatch.setattr(run_once, "ensure_indexes", noop)
     monkeypatch.setattr(run_once, "close_mongo_connection", noop)
+    # Without this, `async with Bot(token=...)` reaches api.telegram.org and
+    # the test both needs the network and fails for the wrong reason.
+    monkeypatch.setattr(run_once, "Bot", lambda **kwargs: FakeBot())
     assert connect_to_mongo is not None  # keep the import meaningful
 
     with pytest.raises(SystemExit) as exit_info:
@@ -395,15 +398,26 @@ def test_single_letter_search_is_not_a_category_wildcard():
 
 # ── CRITICAL 14 — naive datetimes from Mongo follow the SERVER clock ────────
 
-def test_finished_series_ends_on_the_same_day_on_any_host():
-    """expand_occurrences calls .astimezone() on a value Mongo returns naive.
+class _NaiveTrap(datetime):
+    """A datetime that refuses to be silently reinterpreted.
 
-    A naive datetime is interpreted as the host's local time, so the same event
-    draws a different last day depending on the server's TZ. DEBUGGING.md rule
-    4 says everything is computed in the event's own zone, never the server's.
+    time.tzset() does not exist on Windows, so the host clock cannot be moved
+    inside a test there. Trapping the call is portable and pins the same bug:
+    .astimezone() on a naive value quietly means "the server's local time".
     """
-    import os
-    import time as time_module
+
+    def astimezone(self, tz=None):
+        if self.tzinfo is None:
+            raise AssertionError(
+                "astimezone() called on a naive datetime: the value is being "
+                "read as the server's local time, not as UTC. DEBUGGING.md "
+                "rule 4 says everything is computed in the event's own zone."
+            )
+        return super().astimezone(tz)
+
+
+def test_finished_series_is_not_read_in_the_server_timezone():
+    """expand_occurrences must not .astimezone() a value Mongo returns naive."""
     from datetime import date
 
     from app.utils.occurrences import expand_occurrences
@@ -414,28 +428,10 @@ def test_finished_series_ends_on_the_same_day_on_any_host():
         "all_day": True,
         "repeat": "daily",
         "notify_status": "done",
-        "event_ts_utc": datetime(2026, 1, 1, 23, 30),  # naive, as Mongo returns it
+        "event_ts_utc": _NaiveTrap(2026, 1, 1, 23, 30),  # naive, as Mongo returns it
     }
 
-    original = os.environ.get("TZ")
-    results = {}
-    try:
-        for zone in ("UTC", "Asia/Tehran"):
-            os.environ["TZ"] = zone
-            time_module.tzset()
-            results[zone] = expand_occurrences(event, date(2025, 12, 28), date(2026, 1, 5))
-    finally:
-        if original is None:
-            os.environ.pop("TZ", None)
-        else:
-            os.environ["TZ"] = original
-        time_module.tzset()
-
-    assert results["UTC"] == results["Asia/Tehran"], (
-        "the calendar drew %d days on a UTC host and %d on a Tehran host — "
-        "the host clock is leaking into the event's own timezone"
-        % (len(results["UTC"]), len(results["Asia/Tehran"]))
-    )
+    expand_occurrences(event, date(2025, 12, 28), date(2026, 1, 5))
 
 
 def test_mongo_client_returns_timezone_aware_datetimes():
@@ -453,3 +449,25 @@ def test_mongo_client_returns_timezone_aware_datetimes():
         "AsyncIOMotorClient is built without tz_aware=True, so every datetime "
         "read back from Mongo is naive"
     )
+
+
+# ── CRITICAL 16 — the "safe" timezone fallback could itself raise ───────────
+
+def test_safe_zoneinfo_never_raises_without_the_iana_database(monkeypatch):
+    """The fallback must not need the database that just failed.
+
+    ZoneInfo("UTC") sat outside the try, so on a host with no IANA data the
+    safe path threw ZoneInfoNotFoundError and took the request down with it.
+    """
+    from zoneinfo import ZoneInfoNotFoundError
+
+    from app.utils import dates
+
+    def no_database(key, *args, **kwargs):
+        raise ZoneInfoNotFoundError(f"No time zone found with key {key}")
+
+    monkeypatch.setattr(dates, "ZoneInfo", no_database)
+
+    tz, name = dates.safe_zoneinfo("Asia/Tehran")
+    assert name == "UTC"
+    assert tz.utcoffset(datetime(2026, 1, 1)) == timedelta(0)

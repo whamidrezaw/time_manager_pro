@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, features
 
+from app.utils.dates import as_utc
 from app.utils.i18n import category_label, t
 
 logger = logging.getLogger("tm_pro.cards")
@@ -91,9 +92,7 @@ def days_until(event: dict, now: datetime | None = None) -> int:
 
     stamp = event.get("event_ts_utc")
     if isinstance(stamp, datetime):
-        if stamp.tzinfo is None:
-            stamp = stamp.replace(tzinfo=timezone.utc)
-        target = stamp.astimezone(zone).date()
+        target = as_utc(stamp).astimezone(zone).date()
     else:
         try:
             target = date.fromisoformat(str(event.get("date_iso", "")))

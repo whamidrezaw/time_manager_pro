@@ -24,6 +24,7 @@ from app.schemas.requests import (
 from app.schemas.responses import EventOut
 from app.services.chats import scope_for, usable_destination
 from app.utils.dates import (
+    as_utc,
     build_lead_reminders,
     expire_for_repeat,
     first_schedule,
@@ -56,9 +57,7 @@ def next_occurrence_iso(doc: dict) -> str:
         return doc.get("date_iso", "")
 
     tz, _ = safe_zoneinfo(doc.get("tz_name"))
-    if event_ts.tzinfo is None:
-        event_ts = event_ts.replace(tzinfo=timezone.utc)
-    return event_ts.astimezone(tz).date().isoformat()
+    return as_utc(event_ts).astimezone(tz).date().isoformat()
 
 
 def serialize_event(doc: dict) -> EventOut:

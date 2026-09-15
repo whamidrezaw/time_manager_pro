@@ -24,6 +24,10 @@ jinja2==3.1.6
 # ==================== UTILITIES ====================
 certifi==2024.8.30
 jdatetime==5.0.0
+# The IANA timezone database. Linux hosts usually ship it, Windows and slim
+# containers do not, and without it every event silently falls back to UTC.
+# For a timezone-critical app that is not a dependency to leave to the OS.
+tzdata==2026.4
 # Runtime, not test: app/services/telegram_api.py calls it directly for
 # the Bot API 8.0 methods python-telegram-bot 21.1 does not expose.
 httpx==0.28.1
