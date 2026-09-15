@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import Forbidden
 
 from app.config import Settings, get_settings
 from app.db import get_events_collection
@@ -128,6 +129,21 @@ async def handle_snooze_callback(
     return result is not None
 
 
+# Each failure waits longer than the last. Before this, a failed send left
+# next_notify_at untouched and in the past, so the very next pass retried
+# immediately and all five attempts burned in about two minutes.
+RETRY_BACKOFF_MINUTES = (1, 5, 15, 60, 180, 360)
+
+# A send still failing after days is not transient. Capped so a genuinely
+# undeliverable row cannot be retried forever.
+MAX_TRANSIENT_ATTEMPTS = 20
+
+
+def retry_delay(attempts: int) -> timedelta:
+    index = min(max(attempts, 1), len(RETRY_BACKOFF_MINUTES)) - 1
+    return timedelta(minutes=RETRY_BACKOFF_MINUTES[index])
+
+
 async def process_due_reminders(
     bot: Bot,
     settings: Settings | None = None,
@@ -168,19 +184,38 @@ async def process_due_reminders(
         if not claimed:
             continue
 
+        # Which occurrence this pass delivers. If an earlier pass sent it and
+        # then failed to write the state change, this key is already on the
+        # document and the message must not go out a second time.
+        send_key = as_utc(evt["next_notify_at"]) if evt.get("next_notify_at") else None
+        stored_key = claimed.get("last_sent_key")
+        already_sent = (
+            send_key is not None
+            and stored_key is not None
+            and as_utc(stored_key) == send_key
+        )
+        delivered = already_sent
+
         try:
-            await bot.send_message(
-                chat_id=evt["user_id"],
-                text=build_reminder_text(evt),
-                parse_mode="HTML",
-                reply_markup=build_reminder_keyboard(evt, settings),
-            )
+            if already_sent:
+                logger.info(
+                    "event=%s already delivered; finishing the state change only",
+                    evt["_id"],
+                )
+            else:
+                await bot.send_message(
+                    chat_id=evt["user_id"],
+                    text=build_reminder_text(evt),
+                    parse_mode="HTML",
+                    reply_markup=build_reminder_keyboard(evt, settings),
+                )
+                delivered = True
 
             # The group copy comes second and in its own try: the personal
             # reminder has already been delivered, and a bot that was removed
             # from a group must not cost the owner their own reminder or stop
             # the series being rescheduled below.
-            target = evt.get("target_chat_id")
+            target = None if already_sent else evt.get("target_chat_id")
             if target:
                 try:
                     await bot.send_message(
@@ -231,8 +266,12 @@ async def process_due_reminders(
                     await events_coll.update_one(
                         {"_id": evt["_id"]},
                         {
-                            "$set": {"notify_status": "done", "next_notify_at": None},
-                            "$unset": {"processing_started_at": ""},
+                            "$set": {
+                                "notify_status": "done",
+                                "next_notify_at": None,
+                                "updated_at": now,
+                            },
+                            "$unset": {"processing_started_at": "", "last_sent_key": ""},
                         },
                     )
                     processed += 1
@@ -250,8 +289,9 @@ async def process_due_reminders(
                             "event_ts_utc": next_occurrence,
                             "expire_at": expire_for_repeat(next_notify, repeat),
                             "notify_attempts": 0,
+                            "updated_at": now,
                         },
-                        "$unset": {"processing_started_at": ""},
+                        "$unset": {"processing_started_at": "", "last_sent_key": ""},
                     },
                 )
             else:
@@ -261,26 +301,58 @@ async def process_due_reminders(
                         "$set": {
                             "notify_status": "done",
                             "next_notify_at": None,
+                            "updated_at": now,
                         },
-                        "$unset": {"processing_started_at": ""},
+                        "$unset": {"processing_started_at": "", "last_sent_key": ""},
                     },
                 )
 
             processed += 1
 
-        except Exception as exc:
-            attempts = int(evt.get("notify_attempts", 0)) + 1
-            status = "failed" if attempts >= 5 else "pending"
-
+        except Forbidden as exc:
+            # The user blocked the bot, or the chat is gone. Retrying cannot
+            # change that, so this is the one genuinely terminal case.
+            # health.measure() now reports it, so it is not silent.
             await events_coll.update_one(
                 {"_id": evt["_id"]},
                 {
                     "$set": {
-                        "notify_attempts": attempts,
-                        "notify_status": status,
+                        "notify_attempts": int(evt.get("notify_attempts", 0)) + 1,
+                        "notify_status": "failed",
+                        "updated_at": now,
                     },
-                    "$unset": {"processing_started_at": ""},
+                    "$unset": {"processing_started_at": "", "last_sent_key": ""},
                 },
+            )
+            logger.warning(
+                "Reminder undeliverable for event=%s user=%s error=%s",
+                evt["_id"], evt.get("user_id"), exc,
+            )
+
+        except Exception as exc:
+            attempts = int(evt.get("notify_attempts", 0)) + 1
+            update: dict = {
+                "notify_attempts": attempts,
+                "notify_status": "pending",
+                "updated_at": now,
+            }
+
+            if delivered:
+                # The message reached the user; only the bookkeeping failed.
+                # Record which occurrence went out so the next pass finishes
+                # the state change instead of sending the same reminder again,
+                # and leave next_notify_at alone or the key stops matching.
+                update["last_sent_key"] = send_key
+            else:
+                # Nothing was delivered. Back off, and only give up once the
+                # failure has stopped looking transient.
+                update["next_notify_at"] = now + retry_delay(attempts)
+                if attempts >= MAX_TRANSIENT_ATTEMPTS:
+                    update["notify_status"] = "failed"
+
+            await events_coll.update_one(
+                {"_id": evt["_id"]},
+                {"$set": update, "$unset": {"processing_started_at": ""}},
             )
             logger.exception("Reminder send failed for event=%s error=%s", evt["_id"], exc)
 

@@ -43,6 +43,10 @@ async def measure(settings: Settings | None = None) -> dict:
         {"notify_status": {"$in": ["pending", "done"]}, "updated_at": {"$gte": day_ago}}
     )
 
+    # A permanently undeliverable reminder used to be invisible here, so a
+    # blocked bot looked exactly like a healthy queue.
+    failed = await events.count_documents({"notify_status": "failed"})
+
     worst = await events.find_one(
         {"notify_status": "pending", "next_notify_at": {"$lt": overdue_cutoff}},
         {"next_notify_at": 1},
@@ -60,7 +64,8 @@ async def measure(settings: Settings | None = None) -> dict:
         "stuck": stuck,
         "due_next_24h": upcoming,
         "touched_last_24h": sent_today,
-        "healthy": overdue == 0 and stuck == 0,
+        "failed": failed,
+        "healthy": overdue == 0 and stuck == 0 and failed == 0,
     }
 
 

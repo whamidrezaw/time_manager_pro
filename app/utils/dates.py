@@ -77,11 +77,19 @@ def to_jalali(date_iso: str) -> str:
 
 
 def expire_for_repeat(anchor: datetime, repeat: str) -> datetime:
+    """When the document may be garbage-collected, counted from a reminder.
+
+    Every value is one full period plus at least 30 days of slack. The old
+    daily value was 2 days, and only a successful send pushed it forward, so
+    a worker outage longer than the gap let the TTL index delete the user's
+    events. Collection is housekeeping; it must never be the thing that
+    notices the worker is down.
+    """
     delta_map = {
         "none": timedelta(days=30),
-        "daily": timedelta(days=2),
-        "weekly": timedelta(days=10),
-        "monthly": timedelta(days=40),
+        "daily": timedelta(days=31),
+        "weekly": timedelta(days=37),
+        "monthly": timedelta(days=61),
         "yearly": timedelta(days=400),
     }
     return anchor + delta_map.get(repeat, timedelta(days=30))

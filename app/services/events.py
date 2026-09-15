@@ -367,9 +367,17 @@ async def edit_event_for_user(
 
         event_data = {k: v for k, v in event_data.items() if k not in SHARED_FIELDS}
 
+    update: dict = {"$set": event_data}
+    if "repeat" in event_data and "expire_at" not in event_data:
+        # A recurring event edited into a one-off carries no expire_at, and
+        # $set alone left the old one in place: the TTL index then deleted a
+        # perfectly live event on the old schedule. Members never reach this
+        # branch because repeat is a shared field and is stripped above.
+        update["$unset"] = {"expire_at": ""}
+
     await events_coll.update_one(
         {"_id": oid, "user_id": user_id},
-        {"$set": event_data},
+        update,
     )
 
     if existing.get("share_role") == "owner":

@@ -138,27 +138,71 @@ async def test_failed_state_write_does_not_resend(settings, monkeypatch):
 
 # ── CRITICAL 4 — "failed" is a terminal state ───────────────────────────────
 
-async def test_event_recovers_after_a_telegram_outage(settings):
-    """Five transient failures must not silence an event for ever."""
-    from app.db import get_events_collection
-    from app.services.reminders import process_due_reminders, recover_stale_processing
+async def test_event_recovers_after_a_transient_outage(settings):
+    """A transient outage must not silence an event for ever.
 
-    event = await seed_event()
+    The old code gave up after five failures into a terminal "failed" state
+    nothing ever revived, and because it retried instantly those five were
+    spent within about two minutes of the first one.
+    """
+    from app.db import get_events_collection
+    from app.services.reminders import process_due_reminders
+
+    await seed_event()
+
+    async def backoff_window_elapses():
+        """Stands in for real time passing between cron ticks."""
+        await get_events_collection().update_many(
+            {"notify_status": "pending"},
+            {"$set": {"next_notify_at": utc(minutes=-5)}},
+        )
 
     broken = FakeBot(fail_forever=True)
-    for _ in range(6):
+    for _ in range(8):
+        await backoff_window_elapses()
         await process_due_reminders(broken, settings)
-
-    status = (await get_events_collection().find_one({"_id": event["_id"]}))["notify_status"]
-    assert status == "failed", f"precondition: expected 'failed', got {status!r}"
+    assert broken.sent == [], "nothing should have been delivered while it was down"
 
     working = FakeBot()
-    await recover_stale_processing(settings)
+    await backoff_window_elapses()
     await process_due_reminders(working, settings)
 
     assert len(working.sent) == 1, (
-        "the event never fires again after the outage — 'failed' has no recovery path"
+        "the event never fired again once the outage ended"
     )
+
+
+async def test_blocked_user_stops_being_retried(settings):
+    """Forbidden is permanent. Backing off and retrying it is pure noise."""
+    from telegram.error import Forbidden
+
+    from app.db import get_events_collection
+    from app.services.reminders import process_due_reminders
+
+    event = await seed_event()
+
+    class BlockedBot(FakeBot):
+        async def send_message(self, chat_id, text, **kwargs):
+            raise Forbidden("bot was blocked by the user")
+
+    await process_due_reminders(BlockedBot(), settings)
+
+    fresh = await get_events_collection().find_one({"_id": event["_id"]})
+    assert fresh["notify_status"] == "failed", (
+        f"expected a blocked user to end in 'failed', got {fresh['notify_status']!r}"
+    )
+
+
+async def test_health_report_sees_a_permanently_failed_reminder(settings):
+    """A blocked bot used to look exactly like a healthy queue."""
+    from app.services.health import measure
+
+    await seed_event(notify_status="failed", next_notify_at=None)
+
+    stats = await measure(settings)
+
+    assert stats["failed"] == 1, "measure() does not count failed reminders"
+    assert stats["healthy"] is False, "a failed reminder must not read as healthy"
 
 
 # ── MAJOR 5 — retries have no backoff ───────────────────────────────────────
