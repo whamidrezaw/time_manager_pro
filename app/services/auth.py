@@ -30,17 +30,48 @@ _rate_store: dict[str, list[float]] = {}
 # query, and sharing one budget would let typing lock the user out of saving.
 READ_SCOPE = "read"
 WRITE_SCOPE = "write"
+# Anonymous requests to the public share pages, keyed by client IP rather than
+# by a Telegram user id. Its own scope so a flood of strangers can never spend
+# a signed-in user's budget.
+PUBLIC_SCOPE = "public"
+
+# The fallback store keeps one key per identity. With user ids that grows with
+# the user base; with IP keys it grows with the internet, so it needs a ceiling.
+MAX_RATE_KEYS = 10_000
 
 
 def scope_limit(scope: str, settings: Settings) -> int:
-    return settings.rate_limit_read_count if scope == READ_SCOPE else settings.rate_limit_count
+    if scope == READ_SCOPE:
+        return settings.rate_limit_read_count
+    if scope == PUBLIC_SCOPE:
+        return settings.rate_limit_public_count
+    return settings.rate_limit_count
 
 
 def _prune_rate_history(key: str, window_seconds: int = 60) -> list[float]:
     now = time.time()
     history = [t for t in _rate_store.get(key, []) if now - t < window_seconds]
-    _rate_store[key] = history
+    if history:
+        _rate_store[key] = history
+    else:
+        # An empty list was still a permanent entry. Harmless for a few
+        # thousand user ids, a slow leak once the key is a client IP.
+        _rate_store.pop(key, None)
     return history
+
+
+def _evict_rate_keys() -> None:
+    """Keep the fallback store bounded.
+
+    Only reached when MongoDB is unavailable, which is exactly when the
+    process should not also be running out of memory. Oldest activity goes
+    first; the worst case is that a handful of callers get a fresh budget.
+    """
+    if len(_rate_store) <= MAX_RATE_KEYS:
+        return
+    ordered = sorted(_rate_store.items(), key=lambda kv: max(kv[1], default=0.0))
+    for key, _ in ordered[: len(_rate_store) - MAX_RATE_KEYS]:
+        _rate_store.pop(key, None)
 
 
 def _check_rate_limit_memory(
@@ -56,6 +87,7 @@ def _check_rate_limit_memory(
         raise HTTPException(status_code=429, detail="RATE_LIMIT")
     history.append(time.time())
     _rate_store[key] = history
+    _evict_rate_keys()
 
 
 def check_rate_limit(
@@ -273,3 +305,26 @@ async def get_authenticated_user_id(
 ) -> str:
     auth_result = await validate_init_data(request, init_data, settings, scope)
     return auth_result["user_id"]
+
+
+def client_ip(request) -> str:
+    """Best-effort client address for anonymous rate limiting.
+
+    Render terminates TLS and forwards the real address in X-Forwarded-For, so
+    request.client.host is the proxy. The leftmost entry is the one the proxy
+    saw. It is client-supplied and therefore spoofable: an attacker who rotates
+    the header gets a fresh budget each time. That is a ceiling on how much
+    this can do, not a reason to skip it — it stops the ordinary case of one
+    host hammering a share link, and the expensive work behind these routes is
+    now 55ms in a threadpool rather than 317ms on the event loop.
+    """
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    return getattr(getattr(request, "client", None), "host", "") or "unknown"
+
+
+async def check_public_rate_limit(request, settings: Settings | None = None) -> None:
+    """Rate limit for routes with no initData to identify the caller."""
+    settings = settings or get_settings()
+    await check_rate_limit_mongo(f"ip:{client_ip(request)}", settings, scope=PUBLIC_SCOPE)

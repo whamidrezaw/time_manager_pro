@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from mongomock_motor import AsyncMongoMockClient
+from starlette.requests import Request
 
 from app import db as app_db
 
@@ -51,6 +52,31 @@ def install_fake_db() -> AsyncMongoMockClient:
 def teardown_fake_db() -> None:
     app_db._client = None
     app_db._database = None
+
+
+def fake_request(path: str = "/", client_ip: str = "203.0.113.7", **headers) -> Request:
+    """A real starlette Request, not a mock.
+
+    The public routes read x-forwarded-for, so header access has to behave
+    like the real thing or the rate limiter is untested.
+    """
+    raw = [(b"x-forwarded-for", client_ip.encode())]
+    raw += [(k.lower().replace("_", "-").encode(), v.encode()) for k, v in headers.items()]
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "https",
+            "path": path,
+            "raw_path": path.encode(),
+            "query_string": b"",
+            "root_path": "",
+            "headers": raw,
+            "client": ("10.0.0.1", 12345),
+            "server": ("testserver", 443),
+        }
+    )
 
 
 def utc(**kwargs) -> datetime:

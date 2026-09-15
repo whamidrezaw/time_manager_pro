@@ -7,13 +7,22 @@ Each docstring names the finding it pins down.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fastapi import HTTPException
 
-from tests.harness import FakeBot, install_fake_db, seed_event, teardown_fake_db, utc
+from tests.harness import (
+    FakeBot,
+    fake_request,
+    install_fake_db,
+    seed_event,
+    teardown_fake_db,
+    utc,
+)
 
 
 def as_utc(value: datetime) -> datetime:
@@ -304,9 +313,11 @@ async def test_card_endpoint_yields_to_the_event_loop():
     stalls.clear()
 
     started = time.perf_counter()
-    await public_card(token)
+    await public_card(fake_request(f"/c/{token}/card.png"), token)
     elapsed = time.perf_counter() - started
     watch.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await watch
 
     # No observation at all means the loop never got control: the stall was
     # the whole render.
@@ -651,3 +662,227 @@ async def test_revoking_sharing_leaves_existing_members_alone(settings):
     assert await member_count(share_id) == 1, (
         "revoking the link removed a member who had already joined"
     )
+
+
+# ── MAJOR 17 — the event limit was decided before the insert ────────────────
+
+async def test_event_limit_holds_when_the_count_is_stale(settings):
+    """The guard must survive a count that was already out of date.
+
+    count_documents then insert_one leaves a window where a second request
+    passes the same check. mongomock never suspends at an await, so the race
+    cannot be reproduced by running two coroutines; injecting the stale read
+    tests the same property deterministically.
+    """
+    from app.db import get_events_collection
+    from app.schemas.requests import AddEventRequest
+    from app.services import events as events_module
+
+    limit = settings.event_limit_base
+    for index in range(limit):
+        await seed_event(title=f"filler {index}")
+
+    real = get_events_collection()
+
+    class StaleFirstCount:
+        """Answers the pre-check with a stale value, then tells the truth."""
+
+        def __init__(self, inner):
+            self._inner = inner
+            self._calls = 0
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        async def count_documents(self, *args, **kwargs):
+            self._calls += 1
+            if self._calls == 1:
+                return 0          # as if nothing had been saved yet
+            return await self._inner.count_documents(*args, **kwargs)
+
+    monkeypatched = StaleFirstCount(real)
+    events_module.get_events_collection = lambda: monkeypatched
+    try:
+        with pytest.raises(HTTPException) as exc:
+            await events_module.add_event_for_user(
+                "1001",
+                AddEventRequest(
+                    initData="x", title="One too many",
+                    date="2026-10-01", timezone="UTC",
+                ),
+                settings,
+            )
+        assert exc.value.detail == "EVENT_LIMIT_REACHED"
+    finally:
+        events_module.get_events_collection = get_events_collection
+
+    total = await real.count_documents({"user_id": "1001"})
+    assert total == limit, (
+        f"{total} events stored against a limit of {limit}: the row that got "
+        "past the stale check was not rolled back"
+    )
+
+
+# ── MAJOR 18 — the public pages had no rate limit at all ───────────────────
+
+async def test_public_routes_are_rate_limited(settings):
+    """Anonymous, unmetered, and behind them a 55ms render."""
+    from app.services.auth import check_public_rate_limit
+
+    tight = settings.model_copy(update={"rate_limit_public_count": 3})
+    request = fake_request("/c/abc/card.png", client_ip="198.51.100.9")
+
+    for attempt in range(3):
+        await check_public_rate_limit(request, tight)
+
+    with pytest.raises(HTTPException) as exc:
+        await check_public_rate_limit(request, tight)
+    assert exc.value.status_code == 429
+
+    # A different caller must not be punished for the first one's traffic.
+    await check_public_rate_limit(
+        fake_request("/c/abc/card.png", client_ip="198.51.100.10"), tight
+    )
+
+
+def test_both_public_routes_actually_call_the_limiter():
+    """The previous test proves the limiter works, not that it is wired in.
+
+    Removing either call would leave that test green, so check the routes.
+    """
+    import inspect
+
+    from app.routes.share import public_card, public_countdown
+
+    for route in (public_card, public_countdown):
+        assert "check_public_rate_limit" in inspect.getsource(route), (
+            f"{route.__name__} does not rate limit an anonymous request"
+        )
+
+
+def test_memory_rate_limit_store_stays_bounded():
+    """The fallback store kept one permanent entry per identity.
+
+    Harmless for a few thousand Telegram ids. Once the key is a client IP it
+    grows with whoever visits, and the fallback only runs when MongoDB is
+    already unavailable - the worst moment to also be leaking memory.
+    """
+    from app.services import auth
+
+    auth._rate_store.clear()
+    try:
+        for index in range(auth.MAX_RATE_KEYS + 500):
+            auth.check_rate_limit(f"ip:203.0.113.{index}", scope=auth.PUBLIC_SCOPE)
+        assert len(auth._rate_store) <= auth.MAX_RATE_KEYS, (
+            f"{len(auth._rate_store)} keys retained against a cap of "
+            f"{auth.MAX_RATE_KEYS}"
+        )
+    finally:
+        auth._rate_store.clear()
+
+
+# ── MAJOR 19 — no security headers at all ──────────────────────────────────
+
+def _client():
+    from fastapi.testclient import TestClient
+
+    import app.main as main_module
+
+    return TestClient(main_module.app, base_url="https://testserver")
+
+
+def test_security_headers_are_set():
+    """Checked on a real response through the app, not on the constants."""
+    response = _client().get("/health")
+
+    assert response.headers.get("X-Content-Type-Options") == "nosniff"
+    assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+    assert "max-age=" in (response.headers.get("Strict-Transport-Security") or "")
+    assert "default-src 'self'" in (response.headers.get("Content-Security-Policy") or "")
+
+
+def test_csp_allows_every_origin_the_templates_load():
+    """The policy must match what the app actually loads.
+
+    A CSP that is wrong by one directive does not warn anybody: the script
+    just does not load and the Mini App looks broken. This walks the templates
+    and the stylesheet instead of trusting that the policy was kept in step.
+    """
+    import re
+    from pathlib import Path
+
+    from app.middleware import CSP
+
+    root = Path(__file__).resolve().parents[1]
+    sources = list((root / "templates").glob("*.html")) + [root / "static" / "style.css"]
+
+    origins: set[str] = set()
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        for url in re.findall(r"""(?:src|href)=["'](https?://[^"'/]+)""", text):
+            origins.add(url)
+        for url in re.findall(r"""url\(["']?(https?://[^"')]+)""", text):
+            origins.add(url.split("/", 3)[0] + "//" + url.split("/", 3)[2])
+
+    missing = sorted(o for o in origins if o not in CSP)
+    assert not missing, (
+        f"the templates load {missing} but the policy does not allow it — "
+        "either add it to app/middleware.py or stop loading it"
+    )
+
+
+def test_public_pages_carry_no_inline_script_or_style():
+    """The policy has no 'unsafe-inline', so nothing may rely on it.
+
+    countdown.html used to carry both, and its inline script interpolated
+    miniapp_url straight into a JS string literal, which Jinja does not
+    autoescape for. Both now live in /static and the URL arrives through a
+    data attribute.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+
+    offenders: list[str] = []
+    for path in (root / "templates").glob("*.html"):
+        text = path.read_text(encoding="utf-8")
+        if re.search(r"<script(?![^>]*\bsrc=)[^>]*>", text):
+            offenders.append(f"{path.name}: inline <script>")
+        if re.search(r"<style[^>]*>", text):
+            offenders.append(f"{path.name}: inline <style>")
+        if re.search(r"\bstyle=[\"']", text):
+            offenders.append(f"{path.name}: style= attribute")
+        if re.search(r"\bon(click|load|change|submit|input|error)=", text):
+            offenders.append(f"{path.name}: inline event handler")
+
+    assert not offenders, offenders
+
+
+async def test_countdown_page_renders_with_its_external_assets(settings):
+    """End-to-end proof that moving the inline blocks out did not break it.
+
+    The page is the public face of a shared event, so a broken stylesheet
+    reference is the first thing a stranger would see.
+    """
+    from app.services.sharing import generate_public_token
+
+    token = generate_public_token()
+    await seed_event(public_token=token, public_enabled=True, title="Alice birthday")
+
+    from app.routes.share import public_countdown
+
+    response = await public_countdown(fake_request(f"/c/{token}"), token)
+    body = response.body.decode("utf-8")
+
+    assert "/static/countdown.css?v=" in body, "the stylesheet link is missing"
+    assert "/static/countdown.js?v=" in body, "the script tag is missing"
+    assert "data-miniapp-url=" in body, "the redirect target is not on the body"
+    assert "Alice birthday" in body
+    assert "<style" not in body and "<script>" not in body, (
+        "an inline block came back; the policy has no 'unsafe-inline'"
+    )
+
+    root = __import__("pathlib").Path(__file__).resolve().parents[1]
+    assert (root / "static" / "countdown.css").exists()
+    assert (root / "static" / "countdown.js").exists()

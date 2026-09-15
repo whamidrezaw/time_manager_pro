@@ -9,8 +9,14 @@ from fastapi.templating import Jinja2Templates
 from pydantic import Field
 
 from app.config import get_settings
+from app.routes.web import ASSET_VERSION
 from app.schemas.common import InitDataPayload
-from app.services.auth import READ_SCOPE, WRITE_SCOPE, validate_init_data
+from app.services.auth import (
+    READ_SCOPE,
+    WRITE_SCOPE,
+    check_public_rate_limit,
+    validate_init_data,
+)
 from app.services.cards import FontsMissing, fonts_available, render_event_card
 from app.services.reminders import event_language
 from app.services.sharing import (
@@ -102,7 +108,10 @@ async def api_share_prepare(request: Request, payload: SharePayload) -> dict:
 
 
 @router.get("/c/{token}/card.png")
-async def public_card(token: str) -> Response:
+async def public_card(request: Request, token: str) -> Response:
+    # Anonymous, so there is no initData to identify the caller: keyed by IP.
+    await check_public_rate_limit(request)
+
     event = await get_public_event(token)
     if not event:
         raise HTTPException(status_code=404, detail="NOT_FOUND")
@@ -133,6 +142,8 @@ async def public_countdown(request: Request, token: str):
     user-agent check, so the button below it is always present and always
     works — nobody ends up staring at a page that did nothing.
     """
+    await check_public_rate_limit(request)
+
     event = await get_public_event(token)
     if not event:
         raise HTTPException(status_code=404, detail="NOT_FOUND")
@@ -144,6 +155,9 @@ async def public_countdown(request: Request, token: str):
         request,
         "countdown.html",
         {
+            # The countdown page now loads its CSS and JS from /static, so it
+            # needs the same cache-busting version the Mini App uses.
+            "asset_version": ASSET_VERSION,
             "lang": language,
             "direction": "rtl" if language == "fa" else "ltr",
             "title": str(event.get("title", "")),

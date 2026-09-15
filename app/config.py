@@ -54,6 +54,17 @@ class Settings(BaseSettings):
     # Reads are cheap and the search box fires one per query, so they get their
     # own budget. Writes stay on the tighter one.
     rate_limit_read_count: int = Field(default=120, alias="RATE_LIMIT_READ_COUNT")
+    # Anonymous traffic on the public share pages, counted per client IP.
+    # Its own budget because it shares nothing with a signed-in user's.
+    rate_limit_public_count: int = Field(default=60, alias="RATE_LIMIT_PUBLIC_COUNT")
+
+    # Overrides app/middleware.py's derived policy. Set it to an empty string
+    # to send no CSP at all: the escape hatch exists because a policy that is
+    # wrong by one directive shows up as a blank Mini App, and whoever is
+    # looking at that needs a fix without a deploy.
+    content_security_policy: str | None = Field(
+        default=None, alias="CONTENT_SECURITY_POLICY"
+    )
 
     reminder_batch_size: int = Field(default=200, alias="REMINDER_BATCH_SIZE")
     stale_processing_secs: int = Field(default=300, alias="STALE_PROCESSING_SECS")
@@ -105,6 +116,8 @@ class Settings(BaseSettings):
         if self.rate_limit_count < 1:
             raise ValueError("RATE_LIMIT_COUNT must be >= 1")
 
+        if self.rate_limit_public_count < 1:
+            raise ValueError("RATE_LIMIT_PUBLIC_COUNT must be at least 1")
         if self.rate_limit_read_count < 1:
             raise ValueError("RATE_LIMIT_READ_COUNT must be >= 1")
 
