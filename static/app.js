@@ -550,32 +550,75 @@
   }
 
   /* ── Custom Confirm Dialog ──────────────────────────── */
+  // A native <dialog> opened with showModal(): the browser moves focus into
+  // it, makes the page behind it inert and closes it on Escape or a back
+  // gesture. What this code guarantees is that every opening settles exactly
+  // one decision, however the dialog ends up closed. Before, a dismissal that
+  // bypassed the buttons left the OK handler armed, and the next confirmation
+  // also deleted the event the user had cancelled.
+  let settleOpenConfirm = null;
+
   function showConfirm({ title, text, okLabel = "Confirm", icon = "🗑️" }) {
+    const dialog = els.confirmOverlay;
+    if (!dialog) return Promise.resolve(false);
+
+    // A new question answers any open one with "no" first, so there is never
+    // more than one decision waiting behind the OK button.
+    settleOpenConfirm?.(false);
+
+    if (els.confirmTitle) els.confirmTitle.textContent = title;
+    if (els.confirmText)  els.confirmText.textContent  = text;
+    if (els.confirmOkBtn) els.confirmOkBtn.textContent = okLabel;
+    const iconEl = dialog.querySelector(".confirm-icon");
+    if (iconEl) iconEl.textContent = icon;
+
     return new Promise((resolve) => {
-      if (!els.confirmOverlay) { resolve(true); return; }
+      const opener = document.activeElement;
+      let settled = false;
 
-      if (els.confirmTitle) els.confirmTitle.textContent = title;
-      if (els.confirmText)  els.confirmText.textContent  = text;
-      if (els.confirmOkBtn) els.confirmOkBtn.textContent = okLabel;
-      const iconEl = els.confirmOverlay.querySelector(".confirm-icon");
-      if (iconEl) iconEl.textContent = icon;
-
-      els.confirmOverlay.hidden = false;
-      els.confirmOverlay.removeAttribute("aria-hidden");
-
-      const cleanup = (result) => {
-        els.confirmOverlay.hidden = true;
-        els.confirmOverlay.setAttribute("aria-hidden", "true");
-        resolve(result);
+      const onOk = () => settle(true);
+      const onCancel = () => settle(false);
+      // "close" is dispatched asynchronously. When a stale one from the
+      // previous opening arrives, this dialog is already open again, and that
+      // event is no answer to this question.
+      const onClose = () => { if (!dialog.open) settle(false); };
+      const onKey = (e) => {
+        if (e.key !== "Escape") return;
+        e.stopPropagation();
+        settle(false);
       };
 
-      const handleOk     = () => cleanup(true);
-      const handleCancel = () => cleanup(false);
-      const handleKey    = (e) => { if (e.key === "Escape") cleanup(false); };
+      function settle(result) {
+        if (settled) return;
+        settled = true;
+        settleOpenConfirm = null;
+        els.confirmOkBtn.removeEventListener("click", onOk);
+        els.confirmCancelBtn.removeEventListener("click", onCancel);
+        dialog.removeEventListener("close", onClose);
+        dialog.removeEventListener("keydown", onKey);
+        if (typeof dialog.close === "function") {
+          if (dialog.open) dialog.close();          // the browser restores focus
+        } else {
+          dialog.removeAttribute("open");
+          opener?.focus?.();
+        }
+        resolve(result);
+      }
 
-      els.confirmOkBtn?.addEventListener("click", handleOk, { once: true });
-      els.confirmCancelBtn?.addEventListener("click", handleCancel, { once: true });
-      document.addEventListener("keydown", handleKey, { once: true });
+      settleOpenConfirm = settle;
+      els.confirmOkBtn.addEventListener("click", onOk);
+      els.confirmCancelBtn.addEventListener("click", onCancel);
+      dialog.addEventListener("close", onClose);
+
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        // WebViews without <dialog> (iOS before 15.4): the same single
+        // decision, without the browser's modality.
+        dialog.setAttribute("open", "");
+        dialog.addEventListener("keydown", onKey);
+        els.confirmCancelBtn.focus();
+      }
     });
   }
 
@@ -1856,8 +1899,11 @@
 
     // Detail actions
     els.detailEditBtn?.addEventListener("click",        () => openEditComposer(getEventById(state.detailEventId)));
-    els.detailDeleteBtn?.addEventListener("click",      deleteCurrentEvent);
-    els.detailPinBtn?.addEventListener("click",         toggleCurrentPin);
+    // Wrapped, not passed directly: both take an optional event id, and a bare
+    // reference receives the click event in its place, which matches no event
+    // and made both buttons do nothing.
+    els.detailDeleteBtn?.addEventListener("click",      () => deleteCurrentEvent());
+    els.detailPinBtn?.addEventListener("click",         () => toggleCurrentPin());
     els.detailShareBtn?.addEventListener("click",       shareCurrentEvent);
     els.detailNoteSaveBtn?.addEventListener("click",    saveCurrentNote);
     els.detailNoteCancelBtn?.addEventListener("click",  resetCurrentNote);
@@ -1873,10 +1919,9 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         if (closeDatePicker()) return;
-        if (els.confirmOverlay && !els.confirmOverlay.hidden) {
-          els.confirmOverlay.hidden = true;
-          return;
-        }
+        // An open confirm closes itself on Escape and settles its own
+        // decision; the sheet underneath has to stay where it is.
+        if (els.confirmOverlay?.open) return;
         if (state.activeSheet) closeSheets();
       }
     });
