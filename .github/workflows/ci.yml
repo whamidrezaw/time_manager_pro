@@ -22,6 +22,9 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+      - name: Install Chromium for the browser tests
+        # tests/browser runs the real app in Chromium with vendored axe-core.
+        run: python -m playwright install --with-deps chromium
       - name: Audit production dependencies
         # Production only. requirements-dev.txt is deliberately not
         # audited: pytest never runs on the server, and pytest-asyncio

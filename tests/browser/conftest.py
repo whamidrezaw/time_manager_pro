@@ -1,0 +1,249 @@
+"""Real-browser harness for the Batch 20 accessibility findings.
+
+The app under test is the real one: templates, static files, security headers
+and the Content-Security-Policy all come from app.main, served by uvicorn on a
+free localhost port. Exactly two things are replaced:
+
+* MongoDB, by the same in-memory mongomock the rest of the suite uses;
+* Telegram's SDK script, by a stub defining window.Telegram.WebApp, because
+  telegram.org is an external service. The initData it carries is signed with
+  the test bot token, so the real authentication path accepts it.
+
+Every page opened through `open_app` gets its own Telegram user, so tests
+share neither data nor rate-limit budgets.
+
+axe-core is vendored in tests/browser/vendor and its SHA-256 is checked before
+it is injected: an outside WCAG opinion is only worth something if it is the
+exact one that was reviewed.
+
+A page opened inside Telegram must not log a page error or a CSP violation.
+That check runs when each test finishes, so it guards every test here.
+"""
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import itertools
+import json
+import os
+import socket
+import threading
+import time
+from datetime import date, timedelta
+from pathlib import Path
+from urllib.parse import urlencode
+
+import pytest
+import uvicorn
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import sync_playwright
+
+from app.services.auth import compute_telegram_hash
+from tests.harness import install_fake_db, seed_event, teardown_fake_db, utc
+
+TELEGRAM_SDK = "https://telegram.org/js/telegram-web-app.js"
+ONBOARDING_SEEN = "try { localStorage.setItem('tmp_onboarding_seen_v1', '1'); } catch (e) {}"
+
+AXE_PATH = Path(__file__).parent / "vendor" / "axe.min.js"
+AXE_VERSION = "4.13.0"
+AXE_SHA256 = "c24f097bd2f451d4f933e8bc7d8d539f8672a2ebcb5cc9f9f3eec8ca9470a0c1"
+AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]
+
+_users = itertools.count(700001)
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+class LiveServer:
+    """app.main on a background thread, with an event loop tests can reach."""
+
+    def __init__(self) -> None:
+        from app.main import app
+
+        self.port = _free_port()
+        self.url = f"http://127.0.0.1:{self.port}"
+        self.loop = asyncio.new_event_loop()
+        # lifespan off: startup would call Telegram and a real MongoDB.
+        config = uvicorn.Config(app, host="127.0.0.1", port=self.port, lifespan="off", log_level="warning")
+        self.server = uvicorn.Server(config)
+        self.thread = threading.Thread(target=self._serve, name="a11y-live-server", daemon=True)
+
+    def _serve(self) -> None:
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self.server.serve())
+
+    def start(self) -> None:
+        self.thread.start()
+        deadline = time.monotonic() + 15
+        while not self.server.started:
+            if time.monotonic() > deadline or not self.thread.is_alive():
+                raise RuntimeError("the live server did not start")
+            time.sleep(0.05)
+
+    def run(self, coroutine):
+        """Runs a coroutine on the server's own loop, so Mongo sees one loop."""
+        return asyncio.run_coroutine_threadsafe(coroutine, self.loop).result(timeout=15)
+
+    def stop(self) -> None:
+        self.server.should_exit = True
+        self.thread.join(timeout=15)
+
+
+@pytest.fixture(scope="module")
+def live_server():
+    install_fake_db()
+    server = LiveServer()
+    server.start()
+    yield server
+    server.stop()
+    teardown_fake_db()
+
+
+@pytest.fixture(scope="module")
+def browser():
+    with sync_playwright() as playwright:
+        try:
+            chromium = playwright.chromium.launch()
+        except PlaywrightError as exc:
+            raise RuntimeError(
+                "Chromium for Playwright is not installed. Run: python -m playwright install chromium"
+            ) from exc
+        yield chromium
+        chromium.close()
+
+
+def signed_init_data(user_id: int, lang: str) -> str:
+    fields = {
+        "auth_date": str(int(time.time())),
+        "query_id": f"a11y{user_id}",
+        "user": json.dumps(
+            {"id": user_id, "first_name": "Test", "language_code": lang}, separators=(",", ":")
+        ),
+    }
+    fields["hash"] = compute_telegram_hash(fields, os.environ["BOT_TOKEN"])
+    return urlencode(fields)
+
+
+def telegram_stub(user_id: int, lang: str, scheme: str, theme: dict | None) -> str:
+    """Only the surface static/*.js actually touches."""
+    return f"""
+window.Telegram = {{ WebApp: {{
+  initData: {json.dumps(signed_init_data(user_id, lang))},
+  initDataUnsafe: {{ user: {{ id: {user_id}, first_name: "Test", language_code: {json.dumps(lang)} }} }},
+  colorScheme: {json.dumps(scheme)},
+  themeParams: {json.dumps(theme or {})},
+  version: "8.0", platform: "tdesktop",
+  isVersionAtLeast: function () {{ return true; }},
+  ready: function () {{}}, expand: function () {{}}, close: function () {{}},
+  onEvent: function () {{}}, offEvent: function () {{}},
+  setHeaderColor: function () {{}}, setBackgroundColor: function () {{}},
+  openTelegramLink: function () {{}}, openLink: function () {{}},
+  shareMessage: function (id, done) {{ if (done) done(true); }},
+  HapticFeedback: {{ impactOccurred: function () {{}}, notificationOccurred: function () {{}},
+                     selectionChanged: function () {{}} }},
+  BackButton: {{ show: function () {{}}, hide: function () {{}}, onClick: function () {{}},
+                 offClick: function () {{}} }},
+  MainButton: {{ show: function () {{}}, hide: function () {{}}, setText: function () {{}},
+                 onClick: function () {{}}, offClick: function () {{}} }}
+}} }};
+"""
+
+
+def default_events() -> list[dict]:
+    """Three events: one today, one pinned, one far away. Titles are unique."""
+    today = date.today()
+    return [
+        {"title": "Dentist appointment", "category": "health", "date_iso": today.isoformat(),
+         "event_ts_utc": utc(hours=6)},
+        {"title": "Mom's birthday", "category": "birthday", "pinned": True,
+         "date_iso": (today + timedelta(days=3)).isoformat(), "event_ts_utc": utc(days=3)},
+        {"title": "Tax return", "category": "finance",
+         "date_iso": (today + timedelta(days=44)).isoformat(), "event_ts_utc": utc(days=44)},
+    ]
+
+
+@pytest.fixture
+def open_app(browser, live_server):
+    """Opens /webapp as a fresh Telegram user and returns the Playwright page.
+
+    The page carries what the tests read back: `api_calls` (POST /api/* in
+    order), `deleted` (event ids sent to /api/delete), `event_ids` (title -> id),
+    `console_errors` and `page_errors`.
+    """
+    opened: list[tuple[object, bool]] = []
+
+    def factory(*, lang="en", scheme="light", theme=None, width=390,
+                onboarding_seen=True, telegram=True):
+        user_id = next(_users)
+        seeded = [live_server.run(seed_event(user_id=str(user_id), **event)) for event in default_events()]
+
+        context = browser.new_context(
+            viewport={"width": width, "height": 844}, color_scheme=scheme, reduced_motion="reduce",
+        )
+        context.set_default_timeout(5000)
+        if onboarding_seen:
+            context.add_init_script(ONBOARDING_SEEN)
+
+        page = context.new_page()
+        page.api_calls, page.deleted, page.console_errors, page.page_errors = [], [], [], []
+        page.event_ids = {doc["title"]: str(doc["_id"]) for doc in seeded}
+
+        def record(request):
+            if request.method == "POST" and "/api/" in request.url:
+                name = request.url.split("/api/", 1)[1]
+                page.api_calls.append(name)
+                if name == "delete":
+                    page.deleted.append((request.post_data_json or {}).get("event_id"))
+
+        page.on("request", record)
+        page.on("console", lambda msg: msg.type == "error" and page.console_errors.append(msg.text))
+        page.on("pageerror", lambda error: page.page_errors.append(str(error)))
+
+        sdk = telegram_stub(user_id, lang, scheme, theme) if telegram else ""
+        page.route(TELEGRAM_SDK, lambda route: route.fulfill(
+            status=200, content_type="application/javascript", body=sdk))
+
+        page.goto(live_server.url + "/webapp")
+        if telegram:
+            page.wait_for_selector(".event-card")
+        opened.append((page, telegram))
+        return page
+
+    yield factory
+
+    problems: list[str] = []
+    for page, inside_telegram in opened:
+        if inside_telegram:
+            problems += [f"page error: {error}" for error in page.page_errors]
+            problems += [f"CSP: {text}" for text in page.console_errors if "Content Security Policy" in text]
+        page.context.close()
+    assert not problems, "the page logged errors while the test ran:\n" + "\n".join(problems)
+
+
+@pytest.fixture(scope="module")
+def axe_source() -> str:
+    data = AXE_PATH.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    assert digest == AXE_SHA256, (
+        f"{AXE_PATH.name} is not the reviewed axe-core {AXE_VERSION} (sha256 {digest}). "
+        "Update vendor/README.md and AXE_SHA256 together, never one alone."
+    )
+    return data.decode("utf-8")
+
+
+@pytest.fixture
+def axe(axe_source):
+    """Returns serious and critical WCAG 2.1 A/AA violations for the page as it is now."""
+
+    def run(page) -> list[dict]:
+        page.evaluate(axe_source)  # evaluate() is not subject to the page's CSP
+        options = {"runOnly": {"type": "tag", "values": AXE_TAGS}, "resultTypes": ["violations"]}
+        result = page.evaluate("async (options) => await axe.run(document, options)", options)
+        return [v for v in result["violations"] if v["impact"] in ("serious", "critical")]
+
+    return run
+

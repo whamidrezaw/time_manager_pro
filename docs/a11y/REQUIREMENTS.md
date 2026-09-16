@@ -1,0 +1,58 @@
+# Accessibility requirements — Batch 20
+
+Standard: WCAG 2.1 AA, plus two project decisions (D3, D4 in CONSTRAINTS.md).
+Every requirement names the tests that prove it. All of them were red on
+`main` at `cdeddfb`, and every one was shown green against a throwaway fix in a
+scratch copy, so none of them is a test that cannot pass.
+
+| ID | Requirement | WCAG | Proven by |
+|----|-------------|------|-----------|
+| A11Y-01 | Every dialog moves focus inside when it opens, keeps Tab inside, closes on Escape and returns focus to its opener. Applies to the composer, detail page, date picker, confirm, onboarding and day sheet. | 2.1.2, 2.4.3 | `test_opening_a_dialog_moves_focus_into_it`, `test_tab_never_leaves_an_open_dialog`, `test_escape_closes_the_dialog` |
+| A11Y-02 | Every way of dismissing a confirmation settles it. One confirmation sends exactly one request. Delete and Pin on the detail page work. | 2.1.1, correctness | `test_a_cancelled_delete_is_not_replayed_by_the_next_confirmation`, `test_one_confirmation_sends_exactly_one_delete`, `test_the_detail_page_delete_button_asks_before_deleting`, `test_the_detail_page_pin_button_sends_the_change` |
+| A11Y-03 | Every control exposes name, role and state: fields have readable labels, filters expose `aria-pressed`, tabs control tab panels (or become toggles), calendar days are named with their date and today carries `aria-current="date"`, the skip link is visible on focus, and primary controls are at least 44×44 px. | 1.3.1, 2.4.7, 3.3.2, 4.1.2, 2.5.5 (AAA, D3) | `test_every_form_field_has_a_label_a_screen_reader_can_read`, `test_every_tab_controls_a_tab_panel`, `test_filter_buttons_expose_which_filter_is_active`, `test_calendar_days_are_named_with_their_date`, `test_the_skip_link_becomes_visible_when_focused`, `test_primary_controls_are_at_least_44_css_pixels` |
+| A11Y-04 | The list has structure: section labels are headings, event titles are not flattened inside a button, and the list is not one live region. | 1.3.1, 4.1.3 | `test_list_sections_are_headings`, `test_event_titles_are_not_flattened_inside_a_button`, `test_the_event_list_is_not_one_big_live_region` |
+| A11Y-05 | Text meets 4.5:1 in the fallback light and dark palettes. axe-core reports zero serious or critical violations on five states. A Telegram theme with a weak hint colour is corrected (D4). | 1.4.3, 1.4.11, 4.1.2 | `test_the_fallback_palette_meets_wcag_aa_text_contrast`, `test_axe_finds_no_serious_or_critical_violations`, `test_muted_text_stays_readable_under_a_low_contrast_telegram_theme` |
+| A11Y-06 | A validation error is marked on its field (`aria-invalid`) and connected to a message (`aria-describedby`) that does not disappear. | 3.3.1 | `test_a_missing_title_is_reported_on_the_field_itself` |
+| A11Y-07 | The public countdown page gives the countdown as text (in the image alt), and has a `main` landmark and an `h1`. | 1.1.1, 1.3.1 | `test_the_countdown_image_alt_text_carries_the_countdown`, `test_the_countdown_page_has_a_main_landmark_and_a_heading` |
+| A11Y-08 | The date fields open the picker from the keyboard. | 2.1.1 | `test_the_date_field_opens_the_picker_from_the_keyboard[Enter/Space]` |
+| A11Y-09 | No CSP violation in the console, inside Telegram (every browser test checks this at teardown) or outside it. | security, clean console | `test_opening_the_app_outside_telegram_raises_no_csp_violation` |
+
+## Already met: keep it that way
+
+These were verified in Chromium during the review:
+
+- Persian RTL at 320 px has no horizontal scroll (1.4.10).
+- `lang` and `dir` follow the Telegram language.
+- The composer focuses its title and returns focus when it closes.
+- The viewport allows zoom.
+
+## Order of work (D2)
+
+Step 1 is A11Y-02, the confirm lifecycle and the detail Delete/Pin buttons,
+**in one commit**. Fixing the buttons alone would hand the replay bug to
+keyboard users, who today cannot reach Delete at all. After that the order is
+A11Y-01, 08, 03, 04, 06, 05, 07, 09. Each step makes its tests green and
+leaves every other test as it was.
+
+## What the reverse proof taught the real fixes
+
+- **Date fields.** Act on Enter at keydown and call `stopPropagation`: the
+  picker registers a document-level Enter listener during the same dispatch,
+  and that listener confirms the picker at once. Act on Space at keyup, the
+  way native buttons do. Do not autofocus Confirm on open: a 40 ms timer can
+  hand the Space keyup to it. Run the Space test ten times before committing.
+- **Day sheet.** Escape must work before focus has arrived, so use a
+  document-level handler rather than one on the sheet.
+- **Tabs to toggles.** Converting tabs to toggles also means removing
+  `role="tablist"` and the `aria-selected` writes in JavaScript.
+- **More contrast failures.** axe shows more nodes once the first are fixed.
+  The Share action text (#059669 on #ecf9f5, 3.48:1) and the Delete action
+  text (#ef4444 on #fef0f0, 3.39:1) also fail.
+
+## Still manual (not automatable)
+
+- VoiceOver in Telegram iOS and TalkBack in Telegram Android.
+- A keyboard-only pass in Telegram Desktop.
+- Contrast under a few real Telegram themes.
+
+Record the results in the pull request.

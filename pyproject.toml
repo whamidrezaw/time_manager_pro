@@ -22,4 +22,7 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+# Browser tests run by default; leave them out of a fast local loop with
+# pytest -m "not browser". CI always runs them.
+markers = ["browser: real Chromium through Playwright and axe-core (tests/browser)"]
 addopts = "-q"
