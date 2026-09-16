@@ -881,6 +881,21 @@ a { color: var(--link); }
 .confirm-text { margin: 0 0 24px; color: var(--text-muted); font-size: 0.88rem; }
 .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
+/* The confirm is a native <dialog> in the top layer, so the look the overlay
+   used to give it is set here. Position stays explicit for WebViews that know
+   nothing of <dialog>, where the element would otherwise be an inline box. */
+dialog.confirm-dialog {
+  position: fixed; inset: 0; z-index: 60;
+  margin: auto; height: fit-content;
+  color: var(--text);
+}
+dialog.confirm-dialog:not([open]) { display: none; }
+dialog.confirm-dialog::backdrop {
+  background: rgba(10, 12, 40, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 /* ── Onboarding ──────────────────────────────────────── */
 .onboarding-dialog { max-width: 340px; padding-top: 36px; }
 

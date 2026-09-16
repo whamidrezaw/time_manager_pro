@@ -4,6 +4,8 @@ Every test here is expected to FAIL against main at cdeddfb. That is the point:
 a fix is only proven when a test that failed before it starts passing after
 it. None of them may be skipped, xfailed or loosened to get the branch green;
 CONSTRAINTS.md says so, and REQUIREMENTS in docs/a11y/ names what each pins.
+The Critical A11Y-02 tests are in test_a11y_destructive_actions.py, which
+ships to main as a hotfix.
 
 Run only these:          pytest -m browser
 Leave them out locally:  pytest -m "not browser"
@@ -82,73 +84,6 @@ def open_dialog(open_app, name: str):
             raise AssertionError(f"unknown dialog {name}")
     expect(page.locator(selector)).to_be_visible()
     return page, selector
-
-
-# ── CRITICAL — data loss and actions that do nothing ─────────────────────────
-
-def test_a_cancelled_delete_is_not_replayed_by_the_next_confirmation(open_app):
-    """A11Y-02. Dismissing the confirm with Escape leaves its OK handler armed.
-
-    showConfirm listens for Escape with {once: true}, so any earlier key (Tab)
-    uses the listener up. The global Escape handler then hides the overlay
-    without settling the promise, and the next OK click resolves it as well:
-    deleting one event also deletes the one the user had just cancelled.
-    Reproduced in Chromium during the review.
-    """
-    page = open_app()
-    activate_row_delete(page, "Mom's birthday")
-    page.keyboard.press("Tab")
-    page.keyboard.press("Escape")
-    expect(page.locator("#confirmOverlay")).to_be_hidden(timeout=FAST)
-
-    activate_row_delete(page, "Tax return")
-    page.click("#confirmOkBtn")
-    expect(page.locator(".event-title", has_text="Tax return")).to_have_count(0)
-
-    cancelled = page.event_ids["Mom's birthday"]
-    assert cancelled not in page.deleted, "the delete the user cancelled was sent anyway"
-    assert page.deleted == [page.event_ids["Tax return"]], f"DELETE requests sent: {len(page.deleted)}"
-
-
-def test_one_confirmation_sends_exactly_one_delete(open_app):
-    """A11Y-02. A second activation stacks a second pending confirm.
-
-    Focus never moves into the dialog, so the Delete that opened it can be
-    pressed again. Each press adds another OK listener, and one OK then fires
-    them all: the same event is deleted twice and the second call fails.
-    """
-    page = open_app()
-    activate_row_delete(page, "Tax return")
-    activate_row_delete(page, "Tax return")
-    page.click("#confirmOkBtn")
-    expect(page.locator(".event-title", has_text="Tax return")).to_have_count(0)
-    page.wait_for_timeout(300)
-
-    assert page.deleted == [page.event_ids["Tax return"]], f"DELETE requests sent: {len(page.deleted)}"
-
-
-def test_the_detail_page_delete_button_asks_before_deleting(open_app):
-    """A11Y-02 / 2.1.1. The button does nothing at all, for every user.
-
-    addEventListener passes the click event as deleteCurrentEvent's first
-    argument, so the `eventId = state.detailEventId` default never applies and
-    getEventById(MouseEvent) returns null. Keyboard users have no other way to
-    delete: the swipe actions are tabIndex -1 by design.
-    """
-    page, _ = open_dialog(open_app, "detail")
-    page.click("#detailDeleteBtn")
-
-    expect(page.locator("#confirmOverlay")).to_be_visible(timeout=FAST)
-
-
-def test_the_detail_page_pin_button_sends_the_change(open_app):
-    """A11Y-02 / 2.1.1. Same defect as Delete: toggleCurrentPin gets the click event."""
-    page, _ = open_dialog(open_app, "detail")
-    page.click("#detailPinBtn")
-
-    assert eventually(page, lambda: "pin" in page.api_calls), (
-        f"pressing Pin sent nothing; API calls after load: {page.api_calls}"
-    )
 
 
 # ── Keyboard access ──────────────────────────────────────────────────────────
