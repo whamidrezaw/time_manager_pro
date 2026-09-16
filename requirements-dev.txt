@@ -14,6 +14,10 @@ pytest-cov==6.0.0
 # from a test, which is why every critical finding in the Batch 18 review sat
 # in code the suite never executed.
 mongomock-motor==0.0.36
+# Real Chromium for the accessibility tests in tests/browser. After install:
+#   python -m playwright install chromium
+# axe-core itself is vendored in tests/browser/vendor, not installed.
+playwright==1.56.0
 
 # ==================== QUALITY ====================
 ruff==0.8.4
