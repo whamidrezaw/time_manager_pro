@@ -7,7 +7,7 @@ scratch copy, so none of them is a test that cannot pass.
 
 | ID | Requirement | WCAG | Proven by |
 |----|-------------|------|-----------|
-| A11Y-01 | Every dialog moves focus inside when it opens, keeps Tab inside, closes on Escape and returns focus to its opener. Applies to the composer, detail page, date picker, confirm, onboarding and day sheet. | 2.1.2, 2.4.3 | `test_opening_a_dialog_moves_focus_into_it`, `test_tab_never_leaves_an_open_dialog`, `test_escape_closes_the_dialog` |
+| A11Y-01 | Every dialog starts at its title (the confirm at Cancel), keeps Tab inside, closes on Escape, closes alone when two are stacked (Escape or Telegram's back button), and gives focus back to what opened it. Nine dialogs: composer, detail page, date picker, confirm, onboarding, day sheet, share, referral and invite. | 2.1.2, 2.4.3 | `tests/browser/test_a11y_dialogs.py` |
 | A11Y-02 | Every way of dismissing a confirmation settles it. One confirmation sends exactly one request. Delete and Pin on the detail page work. | 2.1.1, correctness | `test_a_cancelled_delete_is_not_replayed_by_the_next_confirmation`, `test_one_confirmation_sends_exactly_one_delete`, `test_the_detail_page_delete_button_asks_before_deleting`, `test_the_detail_page_pin_button_sends_the_change` |
 | A11Y-03 | Every control exposes name, role and state: fields have readable labels, filters expose `aria-pressed`, tabs control tab panels (or become toggles), calendar days are named with their date and today carries `aria-current="date"`, the skip link is visible on focus, and primary controls are at least 44×44 px. | 1.3.1, 2.4.7, 3.3.2, 4.1.2, 2.5.5 (AAA, D3) | `test_every_form_field_has_a_label_a_screen_reader_can_read`, `test_every_tab_controls_a_tab_panel`, `test_filter_buttons_expose_which_filter_is_active`, `test_calendar_days_are_named_with_their_date`, `test_the_skip_link_becomes_visible_when_focused`, `test_primary_controls_are_at_least_44_css_pixels` |
 | A11Y-04 | The list has structure: section labels are headings, event titles are not flattened inside a button, and the list is not one live region. | 1.3.1, 4.1.3 | `test_list_sections_are_headings`, `test_event_titles_are_not_flattened_inside_a_button`, `test_the_event_list_is_not_one_big_live_region` |
@@ -33,6 +33,12 @@ Step 1 is A11Y-02, the confirm lifecycle and the detail Delete/Pin buttons,
 keyboard users, who today cannot reach Delete at all. After that the order is
 A11Y-01, 08, 03, 04, 06, 05, 07, 09. Each step makes its tests green and
 leaves every other test as it was.
+
+A11Y-01 arrives in three slices on `static/modal.js`, one stack for every
+dialog: 2a onboarding, the date picker and the day sheet, with the confirm
+moving onto the stack; 2b the composer and the detail page; 2c share,
+referral and invite, whose tests are written at the start of 2c. The first
+review listed six dialogs; there are nine.
 
 ## What the reverse proof taught the real fixes
 

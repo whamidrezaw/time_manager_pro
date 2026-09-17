@@ -550,12 +550,11 @@
   }
 
   /* ── Custom Confirm Dialog ──────────────────────────── */
-  // A native <dialog> opened with showModal(): the browser moves focus into
-  // it, makes the page behind it inert and closes it on Escape or a back
-  // gesture. What this code guarantees is that every opening settles exactly
-  // one decision, however the dialog ends up closed. Before, a dismissal that
-  // bypassed the buttons left the OK handler armed, and the next confirmation
-  // also deleted the event the user had cancelled.
+  // Opened through TMModal (static/modal.js), which owns focus, the dialog
+  // stack and Escape. What this function guarantees is that every opening
+  // settles exactly one decision, however the dialog ends up closed. Before
+  // Batch 20, a dismissal that bypassed the buttons left the OK handler armed,
+  // and the next confirmation also deleted the event the user had cancelled.
   let settleOpenConfirm = null;
 
   function showConfirm({ title, text, okLabel = "Confirm", icon = "🗑️" }) {
@@ -573,52 +572,22 @@
     if (iconEl) iconEl.textContent = icon;
 
     return new Promise((resolve) => {
-      const opener = document.activeElement;
-      let settled = false;
+      const onOk = () => window.TMModal.close(dialog, true);
+      const onCancel = () => window.TMModal.close(dialog, false);
 
-      const onOk = () => settle(true);
-      const onCancel = () => settle(false);
-      // "close" is dispatched asynchronously. When a stale one from the
-      // previous opening arrives, this dialog is already open again, and that
-      // event is no answer to this question.
-      const onClose = () => { if (!dialog.open) settle(false); };
-      const onKey = (e) => {
-        if (e.key !== "Escape") return;
-        e.stopPropagation();
-        settle(false);
-      };
-
+      // TMModal calls this exactly once per opening: for the buttons, Escape,
+      // Telegram's back button and a newer question alike.
       function settle(result) {
-        if (settled) return;
-        settled = true;
         settleOpenConfirm = null;
         els.confirmOkBtn.removeEventListener("click", onOk);
         els.confirmCancelBtn.removeEventListener("click", onCancel);
-        dialog.removeEventListener("close", onClose);
-        dialog.removeEventListener("keydown", onKey);
-        if (typeof dialog.close === "function") {
-          if (dialog.open) dialog.close();          // the browser restores focus
-        } else {
-          dialog.removeAttribute("open");
-          opener?.focus?.();
-        }
-        resolve(result);
+        resolve(result === true);
       }
 
-      settleOpenConfirm = settle;
+      settleOpenConfirm = (result) => window.TMModal.close(dialog, result);
       els.confirmOkBtn.addEventListener("click", onOk);
       els.confirmCancelBtn.addEventListener("click", onCancel);
-      dialog.addEventListener("close", onClose);
-
-      if (typeof dialog.showModal === "function") {
-        dialog.showModal();
-      } else {
-        // WebViews without <dialog> (iOS before 15.4): the same single
-        // decision, without the browser's modality.
-        dialog.setAttribute("open", "");
-        dialog.addEventListener("keydown", onKey);
-        els.confirmCancelBtn.focus();
-      }
+      window.TMModal.open(dialog, { focus: els.confirmCancelBtn, onClose: settle });
     });
   }
 
@@ -1340,7 +1309,8 @@
   }
 
   function handleTgBack() {
-    if (closeDatePicker()) return;
+    // The topmost dialog first: a confirm over the detail page closes alone.
+    if (window.TMModal.closeTop()) return;
     if (state.activeSheet) closeSheets();
   }
 
@@ -1918,10 +1888,9 @@
     // Keyboard
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        if (closeDatePicker()) return;
-        // An open confirm closes itself on Escape and settles its own
-        // decision; the sheet underneath has to stay where it is.
-        if (els.confirmOverlay?.open) return;
+        // A dialog on the TMModal stack closes itself on Escape; the sheet
+        // underneath has to stay where it is.
+        if (window.TMModal.top()) return;
         if (state.activeSheet) closeSheets();
       }
     });
@@ -1957,8 +1926,8 @@
     }
     onboardingStep = 0;
     renderOnboardingStep();
-    els.onboardingOverlay.hidden = false;
-    els.onboardingOverlay.setAttribute("aria-hidden", "false");
+    // Escape or a back gesture counts as Skip, so the tour is not shown twice.
+    window.TMModal.open(els.onboardingOverlay, { onClose: rememberOnboardingSeen });
   }
 
   function renderOnboardingStep() {
@@ -1988,10 +1957,10 @@
   }
 
   function completeOnboarding() {
-    if (els.onboardingOverlay) {
-      els.onboardingOverlay.hidden = true;
-      els.onboardingOverlay.setAttribute("aria-hidden", "true");
-    }
+    if (!window.TMModal.close(els.onboardingOverlay)) rememberOnboardingSeen();
+  }
+
+  function rememberOnboardingSeen() {
     try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch (_) {}
   }
 
@@ -2161,27 +2130,19 @@
     });
     if (els.dpClear) els.dpClear.hidden = !allowClear;
 
-    state.lastFocusedElement = document.activeElement;
-
     // Order matters here, and getting it wrong is what made the picker open on
-    // 1900 / January / 1. While the overlay is hidden the wheels have no
+    // 1900 / January / 1. While the dialog is closed the wheels have no
     // scroll box, so the scrollTop that centres today was silently dropped and
     // every column stayed parked on its first item. Show first, fill second.
-    if (els.dpOverlay) {
-      els.dpOverlay.hidden = false;
-      els.dpOverlay.setAttribute("aria-hidden", "false");
-    }
+    // TMModal remembers the opener itself. The picker used to write it into
+    // state.lastFocusedElement, which belongs to the composer underneath, and
+    // closing the composer afterwards sent focus to a hidden date field.
+    window.TMModal.open(els.dpOverlay, { onClose: () => { dp.onPick = null; } });
     dpRender();
-    setTimeout(() => els.dpConfirm?.focus?.(), 40);
   }
 
   function closeDatePicker() {
-    if (!els.dpOverlay || els.dpOverlay.hidden) return false;
-    els.dpOverlay.hidden = true;
-    els.dpOverlay.setAttribute("aria-hidden", "true");
-    dp.onPick = null;
-    state.lastFocusedElement?.focus?.();
-    return true;
+    return window.TMModal.close(els.dpOverlay);
   }
 
   function setEventDate(iso) {
@@ -2259,7 +2220,7 @@
 
     els.dpCancel?.addEventListener("click", closeDatePicker);
     els.dpOverlay?.addEventListener("click", (e) => {
-      if (e.target === els.dpOverlay) closeDatePicker();
+      if (window.TMModal.isBackdropClick(els.dpOverlay, e)) closeDatePicker();
     });
   }
 

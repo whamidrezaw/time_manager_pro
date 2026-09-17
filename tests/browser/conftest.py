@@ -145,8 +145,15 @@ window.Telegram = {{ WebApp: {{
   shareMessage: function (id, done) {{ if (done) done(true); }},
   HapticFeedback: {{ impactOccurred: function () {{}}, notificationOccurred: function () {{}},
                      selectionChanged: function () {{}} }},
-  BackButton: {{ show: function () {{}}, hide: function () {{}}, onClick: function () {{}},
-                 offClick: function () {{}} }},
+  // Handlers are kept so a test can press "back" the way Telegram does.
+  BackButton: {{ show: function () {{}}, hide: function () {{}},
+    onClick: function (handler) {{
+      (window.__tgBackHandlers = window.__tgBackHandlers || []).push(handler);
+    }},
+    offClick: function (handler) {{
+      window.__tgBackHandlers = (window.__tgBackHandlers || [])
+        .filter(function (h) {{ return h !== handler; }});
+    }} }},
   MainButton: {{ show: function () {{}}, hide: function () {{}}, setText: function () {{}},
                  onClick: function () {{}}, offClick: function () {{}} }}
 }} }};

@@ -44,6 +44,14 @@ never does.
   falls below 4.5:1 against the theme background, instead of passing it
   through. The user's theme is not the app's to choose, but readable text is.
 
+- **D5 — dialogs:** every modal is a native `<dialog>` opened through
+  `static/modal.js`: one stack, so Escape and Telegram's back button close only
+  the top dialog, Tab wraps inside it, and focus returns to its opener. It is
+  migrated in three slices (2a, 2b, 2c), each proven on its own.
+- **D6 — initial focus:** a dialog starts at its title; the confirm starts at
+  Cancel. A screen reader announces where the user is, and no phone keyboard
+  springs up before anything was chosen.
+
 ## Exceptions
 
 | ID | Rule | Path | Reason | Owner | Expires |

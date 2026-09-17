@@ -264,7 +264,11 @@
 
     els.sheetTitle.textContent = dayIso;
     els.sheetBody.innerHTML = "";
-    els.sheet.hidden = false;
+    window.TMModal.open(els.sheet, {
+      requestClose: closeSheet,
+      // Escape closes the dialog at once; the next opening must slide in again.
+      onClose: function () { els.sheet.classList.remove("is-open"); }
+    });
     requestAnimationFrame(function () { els.sheet.classList.add("is-open"); });
 
     var list = monthItems.filter(function (item) { return item.date === dayIso; });
@@ -290,7 +294,9 @@
         item.all_day || !item.time_hm ? t("all day") : num(item.time_hm);
 
       row.addEventListener("click", function () {
-        closeSheet();
+        // At once, not animated: the detail page opens next, and it must not
+        // open underneath a modal that is still on its way out.
+        closeSheetNow();
         // Straight into the existing detail view: exactly one place in the app
         // knows how to show an event.
         if (window.TMApp && window.TMApp.openDetail) window.TMApp.openDetail(item.id);
@@ -302,14 +308,16 @@
   function buildSheet() {
     if (els.sheet) return;
 
-    var sheet = document.createElement("div");
-    sheet.className = "day-overlay";
-    sheet.hidden = true;
-    sheet.innerHTML = '<div class="day-dialog" role="dialog" aria-modal="true">'
-      + '<div class="day-handle" aria-hidden="true"></div>'
-      + '<div class="day-head"><span class="day-title" id="dayTitle"></span>'
+    // A native <dialog> opened through TMModal (static/modal.js): focus starts
+    // at the title, Tab stays inside, Escape closes it and focus goes back to
+    // the day that opened it.
+    var sheet = document.createElement("dialog");
+    sheet.className = "day-dialog";
+    sheet.setAttribute("aria-labelledby", "dayTitle");
+    sheet.innerHTML = '<div class="day-handle" aria-hidden="true"></div>'
+      + '<div class="day-head"><h2 class="day-title" id="dayTitle" tabindex="-1" autofocus></h2>'
       + '<button type="button" class="icon-btn" id="dayClose" aria-label="' + t("Close") + '">✕</button></div>'
-      + '<div class="day-body" id="dayBody"></div></div>';
+      + '<div class="day-body" id="dayBody"></div>';
     document.body.appendChild(sheet);
     if (isFa) sheet.setAttribute("dir", "rtl");
 
@@ -317,13 +325,24 @@
     els.sheetTitle = sheet.querySelector("#dayTitle");
     els.sheetBody = sheet.querySelector("#dayBody");
     sheet.querySelector("#dayClose").addEventListener("click", closeSheet);
-    sheet.addEventListener("click", function (e) { if (e.target === sheet) closeSheet(); });
+    sheet.addEventListener("click", function (e) {
+      if (window.TMModal.isBackdropClick(sheet, e)) closeSheet();
+    });
   }
 
+  var closingSheet = null;
+
+  // Animated: the sheet slides out before it leaves the top layer.
   function closeSheet() {
-    if (!els.sheet) return;
+    if (!els.sheet || !window.TMModal.isOpen(els.sheet) || closingSheet) return;
     els.sheet.classList.remove("is-open");
-    setTimeout(function () { els.sheet.hidden = true; }, 200);
+    closingSheet = setTimeout(closeSheetNow, 200);
+  }
+
+  function closeSheetNow() {
+    clearTimeout(closingSheet);
+    closingSheet = null;
+    if (els.sheet) window.TMModal.close(els.sheet);
   }
 
   /* ── Tabs ───────────────────────────────────────────── */

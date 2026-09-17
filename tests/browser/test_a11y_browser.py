@@ -6,13 +6,12 @@ it. None of them may be skipped, xfailed or loosened to get the branch green;
 CONSTRAINTS.md says so, and REQUIREMENTS in docs/a11y/ names what each pins.
 The Critical A11Y-02 tests are in test_a11y_destructive_actions.py, which
 ships to main as a hotfix.
+The A11Y-01 dialog tests are in test_a11y_dialogs.py.
 
 Run only these:          pytest -m browser
 Leave them out locally:  pytest -m "not browser"
 """
 from __future__ import annotations
-
-import time
 
 import pytest
 from playwright.sync_api import expect
@@ -20,26 +19,6 @@ from playwright.sync_api import expect
 pytestmark = pytest.mark.browser
 
 FAST = 1500  # ms. Every expectation below is met within a frame or two, or not at all.
-
-
-def eventually(page, check, seconds: float = 2.0) -> bool:
-    deadline = time.monotonic() + seconds
-    while not check():
-        if time.monotonic() > deadline:
-            return False
-        page.wait_for_timeout(50)
-    return True
-
-
-def focus_is_inside(page, selector: str) -> bool:
-    return page.evaluate("(s) => !!(document.activeElement && document.activeElement.closest(s))", selector)
-
-
-def focused(page) -> str:
-    return page.evaluate("""() => { const a = document.activeElement;
-        if (!a) return 'nothing';
-        const cls = a.className ? '.' + String(a.className).split(' ')[0] : '';
-        return a.id ? '#' + a.id : a.tagName.toLowerCase() + cls; }""")
 
 
 def activate_row_delete(page, title: str) -> None:
@@ -100,47 +79,6 @@ def test_the_date_field_opens_the_picker_from_the_keyboard(open_app, key):
     page.keyboard.press(key)
 
     expect(page.locator("#dpOverlay")).to_be_visible(timeout=FAST)
-
-
-@pytest.mark.parametrize("name", ["detail", "confirm", "day", "onboarding"])
-def test_opening_a_dialog_moves_focus_into_it(open_app, name):
-    """A11Y-01 / 2.4.3. Focus stays on the control behind the modal.
-
-    A screen reader therefore never announces the dialog, and the next Tab
-    walks the page underneath it. The composer already does this right.
-    """
-    page, selector = open_dialog(open_app, name)
-
-    assert eventually(page, lambda: focus_is_inside(page, selector), 1.0), (
-        f"{name} opened but focus is on {focused(page)}"
-    )
-
-
-@pytest.mark.parametrize("name", ["composer", "detail"])
-def test_tab_never_leaves_an_open_dialog(open_app, name):
-    """A11Y-01 / 2.4.3. aria-modal is declared but nothing keeps focus inside."""
-    page, selector = open_dialog(open_app, name)
-    # Dialogs focus their first control from a 40 ms timer. Tabbing before it
-    # fires restarts the walk halfway, which once let this pass on a leaking
-    # composer. Let it settle, then press enough to go round the dialog twice.
-    page.wait_for_timeout(200)
-
-    escaped = set()
-    for _ in range(60):
-        page.keyboard.press("Tab")
-        if not focus_is_inside(page, selector):
-            escaped.add(focused(page))
-
-    assert not escaped, f"Tab left the {name} dialog and reached: {sorted(escaped)}"
-
-
-@pytest.mark.parametrize("name", ["day", "onboarding"])
-def test_escape_closes_the_dialog(open_app, name):
-    """A11Y-01. The global Escape handler knows the other dialogs but not these two."""
-    page, selector = open_dialog(open_app, name)
-    page.keyboard.press("Escape")
-
-    expect(page.locator(selector)).to_be_hidden(timeout=FAST)
 
 
 def test_the_skip_link_becomes_visible_when_focused(open_app):
