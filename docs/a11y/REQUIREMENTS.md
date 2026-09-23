@@ -36,9 +36,15 @@ leaves every other test as it was.
 
 A11Y-01 arrives in three slices on `static/modal.js`, one stack for every
 dialog: 2a onboarding, the date picker and the day sheet, with the confirm
-moving onto the stack; 2b the composer and the detail page; 2c share,
-referral and invite, whose tests are written at the start of 2c. The first
-review listed six dialogs; there are nine.
+moving onto the stack; 2b-1 the status region and the share sheet; 2b-2 the
+composer and the detail page; 2c referral and invite, whose tests are written
+at the start of 2c. The first review listed six dialogs; there are nine.
+
+The share sheet moved ahead of the composer and the detail page because it
+opens on top of the detail page: once that page is a modal dialog, anything
+behind it is inert. The same reason put the status region first — everything
+outside a modal dialog is dropped from the accessibility tree, so the
+validation errors shown while the composer is open would never be announced.
 
 ## What the reverse proof taught the real fixes
 

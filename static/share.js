@@ -4,7 +4,9 @@
    Standalone like referral.js: it builds its own markup and reads what it
    needs from Telegram directly, so app.js keeps working untouched if this
    file ever fails to load. app.js calls window.TMShare.open(event) and
-   falls back to its old text share when this object is absent.
+   falls back to its old text share when this object is absent. The sheet
+   itself opens through static/modal.js (window.TMModal), which owns focus,
+   Escape and the stack.
    ────────────────────────────────────────────────────────────── */
 (function () {
   "use strict";
@@ -55,6 +57,8 @@
   var els = {};
   var current = null;
   var state = null;
+  var pendingQuestion = null;
+  var closing = null;
 
   async function api(path, body) {
     var response = await fetch(path, {
@@ -71,14 +75,18 @@
   function build() {
     if (els.overlay) return;
 
-    var overlay = document.createElement("div");
+    // A native <dialog> shaped exactly like the overlay it replaces: full
+    // screen, dimmed, the sheet at the bottom. Keeping that shape keeps the
+    // look, the tap-outside-to-close and the public-link question as they
+    // were — now in the top layer, where the detail page cannot cover them.
+    var overlay = document.createElement("dialog");
     overlay.className = "shr-overlay";
-    overlay.hidden = true;
+    overlay.setAttribute("aria-labelledby", "shrTitle");
     overlay.innerHTML =
-      '<div class="shr-dialog" role="dialog" aria-modal="true" aria-labelledby="shrTitle">' +
+      '<div class="shr-dialog">' +
         '<div class="shr-handle" aria-hidden="true"></div>' +
         '<div class="shr-head">' +
-          '<h2 class="shr-title" id="shrTitle">' + t("Share event") + "</h2>" +
+          '<h2 class="shr-title" id="shrTitle" tabindex="-1" autofocus>' + t("Share event") + "</h2>" +
           '<button type="button" class="icon-btn shr-close" id="shrClose" aria-label="' +
             t("Close") + '">✕</button>' +
         "</div>" +
@@ -126,17 +134,20 @@
 
   function confirmPublic() {
     // The owner's own decision to make, so it is asked once, in plain words,
-    // at the moment it takes effect — not buried in a settings screen.
+    // at the moment it takes effect — not buried in a settings screen. It is
+    // a dialog of its own on the stack: it sits above the sheet, and Escape
+    // or a back gesture answers it with "no" instead of reaching past it.
     return new Promise(function (resolve) {
-      var box = document.createElement("div");
+      var box = document.createElement("dialog");
       box.className = "shr-confirm";
+      box.setAttribute("aria-labelledby", "shrConfirmTitle");
       if (isFa) box.setAttribute("dir", "rtl");
       box.innerHTML =
         '<div class="shr-confirm-card">' +
-          "<strong>" + t("Turn on public sharing?") + "</strong>" +
+          '<strong id="shrConfirmTitle">' + t("Turn on public sharing?") + "</strong>" +
           "<p>" + t("The title, date and countdown of this event become visible to anyone who opens the link. You can switch it off at any time, and the old link stops working.") + "</p>" +
           '<div class="shr-confirm-actions">' +
-            '<button type="button" class="btn-secondary" data-answer="no">' + t("Cancel") + "</button>" +
+            '<button type="button" class="btn-secondary" data-answer="no" autofocus>' + t("Cancel") + "</button>" +
             '<button type="button" class="btn-primary" data-answer="yes">' + t("Turn on") + "</button>" +
           "</div>" +
         "</div>";
@@ -144,11 +155,18 @@
       box.addEventListener("click", function (event) {
         var answer = event.target.getAttribute("data-answer");
         if (!answer) return;
-        box.remove();
-        resolve(answer === "yes");
+        window.TMModal.close(box, answer === "yes");
       });
 
       document.body.appendChild(box);
+      pendingQuestion = box;
+      window.TMModal.open(box, {
+        onClose: function (result) {
+          pendingQuestion = null;
+          box.remove();
+          resolve(result === true);
+        }
+      });
     });
   }
 
@@ -250,12 +268,23 @@
     }
   }
 
+  // Animated: the sheet slides out before it leaves the top layer.
   function close() {
-    if (!els.overlay) return;
+    if (!els.overlay || !window.TMModal.isOpen(els.overlay) || closing) return;
     els.overlay.classList.remove("is-open");
-    setTimeout(function () {
-      els.overlay.hidden = true;
-    }, 200);
+    closing = setTimeout(closeNow, 200);
+  }
+
+  function closeNow() {
+    clearTimeout(closing);
+    closing = null;
+    if (els.overlay) window.TMModal.close(els.overlay);
+  }
+
+  // However it was closed: its own button, Escape, or Telegram's back button.
+  function closed() {
+    els.overlay.classList.remove("is-open");
+    if (pendingQuestion) window.TMModal.close(pendingQuestion);
   }
 
   async function open(event) {
@@ -267,7 +296,7 @@
     state = null;
     els.preview.innerHTML = '<div class="shr-skeleton"></div>';
     els.hint.textContent = "";
-    els.overlay.hidden = false;
+    window.TMModal.open(els.overlay, { requestClose: close, onClose: closed });
     requestAnimationFrame(function () {
       els.overlay.classList.add("is-open");
     });

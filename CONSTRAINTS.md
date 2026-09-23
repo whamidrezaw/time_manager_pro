@@ -52,6 +52,11 @@ never does.
   Cancel. A screen reader announces where the user is, and no phone keyboard
   springs up before anything was chosen.
 
+- **D7 — status messages:** the page's one status region (`#toast`,
+  `role="status"`) follows the dialog on top, moved when a dialog opens or
+  closes rather than when a message is written. Measured in Chromium: outside
+  an open modal dialog the region is dropped from the accessibility tree.
+
 ## Exceptions
 
 | ID | Rule | Path | Reason | Owner | Expires |

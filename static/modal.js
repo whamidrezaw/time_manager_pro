@@ -10,7 +10,10 @@
      because browsers still disagree on the dialog focusing steps;
    * Tab wrapping inside the dialog, since after the last control a browser
      may hand focus to its own chrome instead;
-   * focus handed back to whatever opened the dialog once it closes.
+   * focus handed back to whatever opened the dialog once it closes;
+   * the page's one status region (#toast) carried into the dialog on top,
+     because everything outside a modal dialog is inert, and an inert live
+     region is neither shown above the dialog nor announced.
 
    WebViews without <dialog> (iOS before 15.4) get the same stack, focus and
    Escape rules on the open attribute, without the browser's modality. */
@@ -19,6 +22,9 @@
 
   var TABBABLE = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
   var stack = [];
+  var status = null;
+  var statusHome = null;
+  var statusAfter = null;
 
   function nativeModal(dialog) {
     return typeof dialog.showModal === "function" && typeof dialog.close === "function";
@@ -32,6 +38,24 @@
   }
 
   function isOpen(dialog) { return indexOf(dialog) !== -1; }
+
+  // Moved when a dialog opens or closes, never while a message is being
+  // written: a screen reader is not handed a live region in the same moment
+  // its text changes.
+  function placeStatusRegion() {
+    if (!status) {
+      status = document.getElementById("toast");
+      if (!status) return;
+      statusHome = status.parentNode;
+      statusAfter = status.nextSibling;
+    }
+    var host = top();
+    if (host) {
+      if (status.parentNode !== host) host.appendChild(status);
+    } else if (status.parentNode !== statusHome) {
+      statusHome.insertBefore(status, statusAfter && statusAfter.parentNode === statusHome ? statusAfter : null);
+    }
+  }
 
   function top() { return stack.length ? stack[stack.length - 1].dialog : null; }
 
@@ -53,6 +77,7 @@
     } else {
       dialog.setAttribute("open", "");
     }
+    placeStatusRegion();
     var target = options.focus || dialog.querySelector("[autofocus]");
     if (target && typeof target.focus === "function") target.focus();
     return true;
@@ -83,6 +108,7 @@
   function finish(index, result) {
     var entry = stack.splice(index, 1)[0];
     entry.dialog.removeEventListener("close", onNativeClose);
+    placeStatusRegion();
     var opener = entry.opener;
     if (opener && opener !== document.body && opener.isConnected && typeof opener.focus === "function") {
       opener.focus();

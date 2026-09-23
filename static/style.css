@@ -1198,6 +1198,17 @@ dialog.dp-dialog::backdrop {
 }
 .shr-overlay.is-open { opacity: 1; }
 
+/* The sheet and its question are native <dialog>s now. These resets keep the
+   shapes their overlays had, so the look and tap-outside-to-close stay the
+   same; the dimming stays on the element, which leaves ::backdrop clear. */
+dialog.shr-overlay, dialog.shr-confirm {
+  width: 100%; height: 100%; max-width: none; max-height: none;
+  margin: 0; border: 0; color: var(--text);
+}
+dialog.shr-overlay { padding: 0; }
+dialog.shr-overlay:not([open]), dialog.shr-confirm:not([open]) { display: none; }
+dialog.shr-overlay::backdrop, dialog.shr-confirm::backdrop { background: transparent; }
+
 .shr-dialog {
   width: min(100%, var(--app-max, 560px));
   max-height: 92svh; overflow-y: auto;

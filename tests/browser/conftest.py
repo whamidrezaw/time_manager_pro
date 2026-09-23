@@ -38,6 +38,7 @@ import uvicorn
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
+from app.config import get_settings
 from app.services.auth import compute_telegram_hash
 from tests.harness import install_fake_db, seed_event, teardown_fake_db, utc
 
@@ -62,10 +63,18 @@ class LiveServer:
     """app.main on a background thread, with an event loop tests can reach."""
 
     def __init__(self) -> None:
-        from app.main import app
-
         self.port = _free_port()
         self.url = f"http://127.0.0.1:{self.port}"
+        # The app builds absolute URLs for share cards and public links from
+        # WEBAPP_BASE_URL. Pointing it at this server is what production does:
+        # one origin serves the page and its images, so img-src 'self' accepts
+        # them. Left as it was, the card preview is refused by the CSP.
+        self._base_url_before = os.environ.get("WEBAPP_BASE_URL")
+        os.environ["WEBAPP_BASE_URL"] = self.url
+        get_settings.cache_clear()
+
+        from app.main import app
+
         self.loop = asyncio.new_event_loop()
         # lifespan off: startup would call Telegram and a real MongoDB.
         config = uvicorn.Config(app, host="127.0.0.1", port=self.port, lifespan="off", log_level="warning")
@@ -91,6 +100,11 @@ class LiveServer:
     def stop(self) -> None:
         self.server.should_exit = True
         self.thread.join(timeout=15)
+        if self._base_url_before is None:
+            os.environ.pop("WEBAPP_BASE_URL", None)
+        else:
+            os.environ["WEBAPP_BASE_URL"] = self._base_url_before
+        get_settings.cache_clear()
 
 
 @pytest.fixture(scope="module")

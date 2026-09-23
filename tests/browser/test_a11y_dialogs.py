@@ -48,6 +48,16 @@ def focused(page) -> str:
         return a.id ? '#' + a.id : a.tagName.toLowerCase() + cls; }""")
 
 
+def ax_ignored(page, selector: str) -> bool:
+    """Whether the accessibility tree drops this element, which is what a
+    screen reader goes by. Everything outside an open modal dialog is inert."""
+    cdp = page.context.new_cdp_session(page)
+    document = cdp.send("DOM.getDocument", {"depth": 0})
+    node = cdp.send("DOM.querySelector", {"nodeId": document["root"]["nodeId"], "selector": selector})
+    tree = cdp.send("Accessibility.getPartialAXTree", {"nodeId": node["nodeId"], "fetchRelatives": False})
+    return bool(tree["nodes"][0].get("ignored"))
+
+
 def press_telegram_back(page) -> None:
     """What Telegram does when the user presses its back button."""
     page.evaluate("() => (window.__tgBackHandlers || []).slice().forEach((handler) => handler())")
@@ -77,6 +87,12 @@ def open_dialog(open_app, name: str):
             page.focus(".cal-day.is-today")
             page.keyboard.press("Enter")
             dialog, title = ".day-dialog", "#dayTitle"
+        elif name == "share":
+            page.focus(".event-card >> nth=0")
+            page.keyboard.press("Enter")
+            expect(page.locator("#detailSheet")).to_be_visible()
+            page.click("#detailShareBtn")
+            dialog, title = ".shr-overlay", "#shrTitle"
         elif name == "confirm-over-detail":
             page.focus(".event-card >> nth=0")
             page.keyboard.press("Enter")
@@ -91,7 +107,7 @@ def open_dialog(open_app, name: str):
 
 # ── Focus on open ────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["composer", "detail", "onboarding", "picker", "day"])
+@pytest.mark.parametrize("name", ["composer", "detail", "onboarding", "picker", "day", "share"])
 def test_opening_a_dialog_focuses_its_title(open_app, name):
     """Decided in Batch 20: a dialog starts at its title.
 
@@ -115,7 +131,7 @@ def test_the_confirm_starts_at_cancel(open_app):
 
 # ── Tab stays inside ─────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["composer", "detail", "onboarding", "picker", "day"])
+@pytest.mark.parametrize("name", ["composer", "detail", "onboarding", "picker", "day", "share"])
 def test_tab_never_leaves_an_open_dialog(open_app, name):
     """aria-modal was declared on every dialog, but nothing kept focus inside."""
     page, dialog, _ = open_dialog(open_app, name)
@@ -134,7 +150,7 @@ def test_tab_never_leaves_an_open_dialog(open_app, name):
 
 # ── Escape, and only the dialog on top ───────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["onboarding", "picker", "day"])
+@pytest.mark.parametrize("name", ["onboarding", "picker", "day", "share"])
 def test_escape_closes_the_dialog(open_app, name):
     """The picker already closed on Escape (guard); onboarding and the day sheet did not."""
     page, dialog, _ = open_dialog(open_app, name)
@@ -145,7 +161,7 @@ def test_escape_closes_the_dialog(open_app, name):
 
 
 @pytest.mark.parametrize("close_with", ["escape", "telegram-back"])
-@pytest.mark.parametrize("stack", ["picker-over-composer", "confirm-over-detail"])
+@pytest.mark.parametrize("stack", ["picker-over-composer", "confirm-over-detail", "share-over-detail"])
 def test_closing_the_top_dialog_leaves_the_one_below_open(open_app, stack, close_with):
     """Only the topmost dialog closes.
 
@@ -155,6 +171,8 @@ def test_closing_the_top_dialog_leaves_the_one_below_open(open_app, stack, close
     """
     if stack == "picker-over-composer":
         top, below = "picker", "#composerSheet"
+    elif stack == "share-over-detail":
+        top, below = "share", "#detailSheet"
     else:
         top, below = "confirm-over-detail", "#detailSheet"
     page, dialog, _ = open_dialog(open_app, top)
@@ -235,3 +253,82 @@ def test_an_event_opened_from_the_day_sheet_shows_its_detail(open_app):
     expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
     expect(page.locator("#detailSheet")).to_be_visible(timeout=FAST)
     expect(page.locator("#detailEventTitle")).to_have_text("Dentist appointment")
+
+
+# ── The share sheet, and what must not change about it ───────────────────────
+
+def test_share_opens_over_the_detail_page_and_returns_to_it(open_app):
+    """Guard for what must stay as it is: sharing opens on top of the detail
+    page, and closing it lands back on the same event, not on the list."""
+    page, dialog, _ = open_dialog(open_app, "share")
+    expect(page.locator("#detailSheet")).to_be_visible()
+
+    page.click("#shrClose")
+    expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
+    expect(page.locator("#detailSheet")).to_be_visible()
+    expect(page.locator("#detailEventTitle")).to_have_text("Mom's birthday")
+
+
+def test_closing_share_returns_focus_to_the_share_button(open_app):
+    """The share sheet never gave focus back: after closing, it was on nothing."""
+    page, dialog, _ = open_dialog(open_app, "share")
+    page.wait_for_timeout(200)
+    page.click("#shrClose")
+    expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
+
+    assert eventually(page, lambda: focused(page) == "#detailShareBtn", 1.0), f"focus is on {focused(page)}"
+
+
+def test_turning_the_public_link_back_on_still_asks_first(open_app):
+    """Guard. Opening the sheet turns the public link on; switching it off and
+    on again asks first, in a box of its own. That question has to stay
+    reachable once the sheet is a dialog in the top layer."""
+    page, _, _ = open_dialog(open_app, "share")
+    switch = page.locator("#shrSwitch")
+    expect(switch).to_have_attribute("aria-checked", "true", timeout=8000)
+
+    switch.click()
+    expect(switch).to_have_attribute("aria-checked", "false", timeout=5000)
+    switch.click()
+    page.click(".shr-confirm-card [data-answer=yes]")
+
+    expect(switch).to_have_attribute("aria-checked", "true", timeout=5000)
+
+
+def test_escape_answers_the_public_link_question_and_leaves_share_open(open_app):
+    """The question is the layer on top, so Escape answers it with no.
+
+    Before Batch 20 Escape reached past both and closed the detail page
+    underneath, leaving the question and the sheet standing.
+    """
+    page, dialog, _ = open_dialog(open_app, "share")
+    switch = page.locator("#shrSwitch")
+    expect(switch).to_have_attribute("aria-checked", "true", timeout=8000)
+    switch.click()
+    expect(switch).to_have_attribute("aria-checked", "false", timeout=5000)
+    switch.click()
+    expect(page.locator(".shr-confirm-card")).to_be_visible()
+
+    page.keyboard.press("Escape")
+
+    expect(page.locator(".shr-confirm")).to_have_count(0)
+    expect(page.locator(dialog)).to_be_visible()
+    expect(switch).to_have_attribute("aria-checked", "false")
+
+
+def test_a_message_stays_announced_while_a_dialog_is_open(open_app):
+    """Decision A of Batch 20: the one status region follows the dialog on top.
+
+    Everything outside an open modal dialog is inert, and an inert live region
+    is neither shown above the dialog nor announced. Measured in Chromium: the
+    region was dropped from the accessibility tree, so a screen reader never
+    heard "Please enter an event title." while the composer was open.
+    """
+    page, _, _ = open_dialog(open_app, "picker")
+    page.evaluate("""() => { const region = document.getElementById('toast');
+        region.textContent = 'Please enter an event title.';
+        region.classList.add('is-visible'); }""")
+    page.wait_for_timeout(200)
+
+    assert not ax_ignored(page, "#toast"), "the status region is hidden from the accessibility tree"
+    expect(page.locator("#toast")).to_be_visible()
