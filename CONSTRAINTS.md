@@ -29,6 +29,15 @@ file is not weakened in the same commit as a change that was failing it.
 The fast loop can leave the browser out with `pytest -m "not browser"`. CI
 never does.
 
+What the external check cannot see: axe-core's stacking model does not know
+the browser's top layer, so inside an open modal `<dialog>` it calls every
+line "overlapped" and measures nothing — a contrast test there passes without
+looking. The `axe` fixture therefore shows open dialogs again non-modally
+before each run (same markup, same pixels), and
+`test_axe_can_still_measure_contrast_inside_an_open_sheet` fails if axe goes
+blind again. Found in Batch 20 step 2b-2, when two axe states turned green
+with no colour changed.
+
 ## Decisions
 
 - **D1 — browser harness:** pytest, Playwright for Python, vendored

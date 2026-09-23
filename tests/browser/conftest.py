@@ -256,11 +256,25 @@ def axe_source() -> str:
     return data.decode("utf-8")
 
 
+def reshow_open_dialogs_for_axe(page) -> None:
+    """axe-core's stacking model does not know the browser's top layer: every
+    line of text inside an open modal <dialog> comes back as "overlapped by
+    another element" (naming no element), so a contrast check there would pass
+    without looking. Showing the same dialogs again non-modally leaves their
+    markup and pixels as they are and lets axe measure them. Modality itself is
+    tested elsewhere, in test_a11y_dialogs.py.
+
+    A dialog that is closed and shown again at once is still open when its
+    queued "close" event arrives, so TMModal ignores that event."""
+    page.evaluate("() => document.querySelectorAll('dialog[open]').forEach((d) => { d.close(); d.show(); })")
+
+
 @pytest.fixture
 def axe(axe_source):
     """Returns serious and critical WCAG 2.1 A/AA violations for the page as it is now."""
 
     def run(page) -> list[dict]:
+        reshow_open_dialogs_for_axe(page)
         page.evaluate(axe_source)  # evaluate() is not subject to the page's CSP
         options = {"runOnly": {"type": "tag", "values": AXE_TAGS}, "resultTypes": ["violations"]}
         result = page.evaluate("async (options) => await axe.run(document, options)", options)

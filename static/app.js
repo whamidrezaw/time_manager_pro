@@ -56,7 +56,6 @@
     activeSheet: null,
     detailEventId: null,
     editingEventId: null,
-    lastFocusedElement: null,
     skip: 0,
     hasMore: false,
     isLoading: false,
@@ -158,7 +157,8 @@
     confirmOkBtn:       $("confirmOkBtn"),
     confirmCancelBtn:   $("confirmCancelBtn"),
 
-    sheetOverlay:       $("sheetOverlay"),
+    composerHost:       $("composerHost"),
+    detailHost:         $("detailHost"),
   };
 
   /* ── Label Maps ─────────────────────────────────────── */
@@ -1264,36 +1264,37 @@
   }
 
   /* ── Sheet Management ────────────────────────────────── */
-  function openSheet(name, focusTgt = null) {
-    state.lastFocusedElement = document.activeElement;
-    if (els.sheetOverlay) els.sheetOverlay.hidden = false;
+  // The composer and the detail page each open in a <dialog> host through
+  // TMModal (static/modal.js), one at a time as before. Closing the other one
+  // first sends its focus home, and the sheet opened next remembers that
+  // place as its own way back: after Edit, closing the composer returns to
+  // the event instead of a hidden Edit button.
+  function sheetHost(name) {
+    return name === "composerSheet" ? els.composerHost : els.detailHost;
+  }
 
-    [els.composerSheet, els.detailSheet].forEach((sheet) => {
-      if (!sheet) return;
-      const active = sheet.id === name;
-      sheet.hidden = !active;
-      sheet.setAttribute("aria-hidden", String(!active));
-    });
-
+  function openSheet(name) {
+    window.TMModal.close(sheetHost(name === "composerSheet" ? "detailSheet" : "composerSheet"));
     state.activeSheet = name;
     if (els.openComposerBtn) {
       els.openComposerBtn.setAttribute("aria-expanded", String(name === "composerSheet"));
     }
     updateTgBackButton();
-    setTimeout(() => focusTgt?.focus?.(), 40);
+    window.TMModal.open(sheetHost(name), { onClose: () => sheetClosed(name) });
   }
 
   function closeSheets() {
-    [els.composerSheet, els.detailSheet].forEach((sheet) => {
-      if (!sheet) return;
-      sheet.hidden = true;
-      sheet.setAttribute("aria-hidden", "true");
-    });
-    if (els.sheetOverlay) els.sheetOverlay.hidden = true;
+    window.TMModal.close(els.composerHost);
+    window.TMModal.close(els.detailHost);
+  }
+
+  // However a sheet was closed: its buttons, Escape, Telegram's back button,
+  // a tap outside it, or the other sheet taking its place.
+  function sheetClosed(name) {
+    if (state.activeSheet !== name) return;
     state.activeSheet = null;
     if (els.openComposerBtn) els.openComposerBtn.setAttribute("aria-expanded", "false");
     updateTgBackButton();
-    state.lastFocusedElement?.focus?.();
   }
 
   function updateTgBackButton() {
@@ -1309,9 +1310,8 @@
   }
 
   function handleTgBack() {
-    // The topmost dialog first: a confirm over the detail page closes alone.
-    if (window.TMModal.closeTop()) return;
-    if (state.activeSheet) closeSheets();
+    // The topmost dialog only: a confirm over the detail page closes alone.
+    window.TMModal.closeTop();
   }
 
   /* ── Composer ────────────────────────────────────────── */
@@ -1355,7 +1355,7 @@
 
   function openCreateComposer() {
     resetComposer();
-    openSheet("composerSheet", els.title);
+    openSheet("composerSheet");
   }
 
   function openEditComposer(event) {
@@ -1406,7 +1406,7 @@
     if (els.composerTitle)    els.composerTitle.textContent    = t("Edit Event");
     if (els.composerSubtitle) els.composerSubtitle.textContent = "Update the event details.";
     if (els.saveEventBtn)     els.saveEventBtn.textContent     = "Save Changes";
-    openSheet("composerSheet", els.title);
+    openSheet("composerSheet");
   }
 
   /* ── Detail Panel ────────────────────────────────────── */
@@ -1554,6 +1554,21 @@
   /* ── Delete ──────────────────────────────────────────── */
   // Takes an id now so a swipe can reach an event that is not open in the
   // sheet. The default keeps every existing call site working untouched.
+  function neighbourEventId(eventId) {
+    const ids = [...document.querySelectorAll(".event-card")].map((card) => card.dataset.id);
+    const index = ids.indexOf(String(eventId));
+    if (index === -1) return null;
+    return ids[index + 1] ?? ids[index - 1] ?? null;
+  }
+
+  // The event after the deleted one, or the one before, or the Add button
+  // once the list is empty, and only while the list is what the user sees.
+  function focusAfterDelete(nextId) {
+    if (els.list?.hidden) return;
+    const card = nextId ? document.querySelector(`.event-card[data-id="${CSS.escape(nextId)}"]`) : null;
+    (card || els.openComposerBtn)?.focus?.();
+  }
+
   async function deleteCurrentEvent(eventId = state.detailEventId) {
     const ev = getEventById(eventId);
     if (!ev) return;
@@ -1571,6 +1586,9 @@
     });
     if (!ok) return;
 
+    // The card that had focus is about to disappear: remember its neighbour
+    // now and hand focus there once the list has been drawn again.
+    const nextId = neighbourEventId(ev.id);
     setLoading(true);
     try {
       // ✅ FIX: event_id (was: eventid)
@@ -1578,6 +1596,7 @@
       closeSheets();
       showToast(t("Event deleted."), "success");
       await loadEvents();
+      focusAfterDelete(nextId);
     } catch (error) {
       showToast(normalizeError(error), "error");
     } finally {
@@ -1825,7 +1844,11 @@
     els.closeComposerX?.addEventListener("click", closeSheets);
     els.closeDetailX?.addEventListener("click",   closeSheets);
     els.cancelBtn?.addEventListener("click",      closeSheets);
-    els.sheetOverlay?.addEventListener("click",   closeSheets);
+    // A tap on the dimmed area outside a sheet closes it, as the old overlay
+    // did: each host is full screen, so that tap lands on the host itself.
+    [els.composerHost, els.detailHost].forEach((host) => host?.addEventListener("click", (e) => {
+      if (e.target === host) closeSheets();
+    }));
 
     // Form
     els.eventForm?.addEventListener("submit", submitEventForm);
@@ -1885,15 +1908,8 @@
     els.onboardingSkipBtn?.addEventListener("click", completeOnboarding);
     els.onboardingNextBtn?.addEventListener("click", advanceOnboarding);
 
-    // Keyboard
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        // A dialog on the TMModal stack closes itself on Escape; the sheet
-        // underneath has to stay where it is.
-        if (window.TMModal.top()) return;
-        if (state.activeSheet) closeSheets();
-      }
-    });
+    // Escape needs no handler here: a native dialog closes itself, and
+    // static/modal.js covers WebViews without <dialog>.
   }
 
   /* ── Onboarding (first run only) ────────────────────── */
@@ -2135,8 +2151,8 @@
     // scroll box, so the scrollTop that centres today was silently dropped and
     // every column stayed parked on its first item. Show first, fill second.
     // TMModal remembers the opener itself. The picker used to write it into
-    // state.lastFocusedElement, which belongs to the composer underneath, and
-    // closing the composer afterwards sent focus to a hidden date field.
+    // the one last-focused slot the composer used too, and closing the
+    // composer afterwards sent focus to a hidden date field.
     window.TMModal.open(els.dpOverlay, { onClose: () => { dp.onPick = null; } });
     dpRender();
   }

@@ -23,6 +23,8 @@ from datetime import date
 import pytest
 from playwright.sync_api import expect
 
+from tests.browser.conftest import reshow_open_dialogs_for_axe
+
 pytestmark = pytest.mark.browser
 
 FAST = 1500  # ms
@@ -61,6 +63,18 @@ def ax_ignored(page, selector: str) -> bool:
 def press_telegram_back(page) -> None:
     """What Telegram does when the user presses its back button."""
     page.evaluate("() => (window.__tgBackHandlers || []).slice().forEach((handler) => handler())")
+
+
+def activate_row_delete(page, title: str) -> None:
+    """Presses a row's Delete exactly as the end of a swipe-and-tap does."""
+    page.evaluate("""(title) => [...document.querySelectorAll('.event-row .row-action-delete')]
+        .find((b) => b.getAttribute('aria-label').endsWith(title)).click()""", title)
+
+
+def focused_card_text(page) -> str:
+    """Text of the event card that has focus, or "" when focus is not on one."""
+    return page.evaluate("""() => { const card = document.activeElement.closest('.event-card');
+        return card ? card.textContent : ''; }""")
 
 
 def open_dialog(open_app, name: str):
@@ -150,7 +164,7 @@ def test_tab_never_leaves_an_open_dialog(open_app, name):
 
 # ── Escape, and only the dialog on top ───────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["onboarding", "picker", "day", "share"])
+@pytest.mark.parametrize("name", ["composer", "detail", "onboarding", "picker", "day", "share"])
 def test_escape_closes_the_dialog(open_app, name):
     """The picker already closed on Escape (guard); onboarding and the day sheet did not."""
     page, dialog, _ = open_dialog(open_app, name)
@@ -332,3 +346,157 @@ def test_a_message_stays_announced_while_a_dialog_is_open(open_app):
 
     assert not ax_ignored(page, "#toast"), "the status region is hidden from the accessibility tree"
     expect(page.locator("#toast")).to_be_visible()
+
+
+# ── The composer and the detail page: what must stay, and what was broken ───
+
+@pytest.mark.parametrize("name", ["composer", "detail"])
+def test_telegram_back_closes_an_open_sheet(open_app, name):
+    """Guard."""
+    page, dialog, _ = open_dialog(open_app, name)
+    press_telegram_back(page)
+
+    expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
+
+
+def test_closing_the_composer_returns_focus_to_the_add_button(open_app):
+    """Guard."""
+    page, dialog, _ = open_dialog(open_app, "composer")
+    page.click("#closeComposerX")
+    expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
+
+    assert eventually(page, lambda: focused(page) == "#openComposerBtn", 1.0), f"focus is on {focused(page)}"
+
+
+def test_closing_the_detail_page_returns_focus_to_its_event(open_app):
+    """Guard."""
+    page, dialog, _ = open_dialog(open_app, "detail")
+    page.click("#closeDetailX")
+    expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
+
+    assert eventually(page, lambda: "Mom's birthday" in focused_card_text(page), 1.0), (
+        f"focus is on {focused(page)}"
+    )
+
+
+def test_a_tap_outside_the_composer_closes_it(open_app):
+    """Guard. The dimmed strip above the sheet closes it, as the overlay did."""
+    page, dialog, _ = open_dialog(open_app, "composer")
+    page.wait_for_timeout(200)
+    page.mouse.click(195, 12)
+
+    expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
+
+
+def test_saving_a_new_event_closes_the_composer_and_lists_it(open_app):
+    """Guard for the composer's main job, which the migration must not touch."""
+    page, dialog, _ = open_dialog(open_app, "composer")
+    page.fill("#title", "Team lunch")
+    page.click("#date")
+    expect(page.locator("#dpOverlay")).to_be_visible()
+    page.click("#dpConfirm")
+    page.click("#saveEventBtn")
+
+    expect(page.locator(dialog)).to_be_hidden(timeout=5000)
+    expect(page.locator(".event-title", has_text="Team lunch")).to_have_count(1, timeout=5000)
+
+
+def test_closing_the_editor_opened_from_the_detail_page_returns_to_the_event(open_app):
+    """Edit swaps the detail page for the composer. The composer remembered the
+    Edit button, hidden by then, so closing it sent focus to nothing."""
+    page, _, _ = open_dialog(open_app, "detail")
+    page.click("#detailEditBtn")
+    expect(page.locator("#composerSheet")).to_be_visible()
+    page.click("#closeComposerX")
+    expect(page.locator("#composerSheet")).to_be_hidden(timeout=FAST)
+
+    assert eventually(page, lambda: "Mom's birthday" in focused_card_text(page), 1.0), (
+        f"focus is on {focused(page)}"
+    )
+
+
+@pytest.mark.parametrize("path", ["detail-page", "row"])
+def test_deleting_an_event_moves_focus_to_the_next_one(open_app, path):
+    """The deleted card cannot take focus back, so focus went to nothing.
+
+    It now goes to the event after it (or the one before, or the Add button
+    once the list is empty), as announced in Batch 20.
+    """
+    page = open_app()
+    if path == "detail-page":
+        page.focus(".event-card >> nth=1")
+        page.keyboard.press("Enter")
+        expect(page.locator("#detailSheet")).to_be_visible()
+        page.click("#detailDeleteBtn")
+    else:
+        activate_row_delete(page, "Dentist appointment")
+    page.click("#confirmOkBtn")
+    expect(page.locator(".event-title", has_text="Dentist appointment")).to_have_count(0)
+
+    assert eventually(page, lambda: "Tax return" in focused_card_text(page), 2.0), (
+        f"focus is on {focused(page)}"
+    )
+
+
+
+@pytest.mark.parametrize("name", ["composer", "detail"])
+def test_axe_can_still_measure_contrast_inside_an_open_sheet(open_app, axe_source, name):
+    """Guard for the measuring stick itself.
+
+    axe-core cannot measure text inside the top layer: with the sheets in
+    modal dialogs it called every line "overlapped by another element" and the
+    contrast tests for the composer and the detail page turned green with no
+    colour changed. The axe fixture now re-shows open dialogs non-modally first;
+    this fails if that stops working and axe goes blind inside a sheet again.
+    The toast is excluded: invisible until it speaks, it does sit over the
+    bottom of the sheet.
+    """
+    page, dialog, _ = open_dialog(open_app, name)
+    page.wait_for_timeout(300)
+    reshow_open_dialogs_for_axe(page)
+    page.evaluate(axe_source)
+    blind = page.evaluate("""async (sheet) => {
+        const result = await axe.run(document, { runOnly: ['color-contrast'], resultTypes: ['incomplete'] });
+        return result.incomplete.flatMap((rule) => rule.nodes)
+          .filter((node) => (node.any || []).some((check) => /overlapped/.test(check.message || '')
+              && (check.relatedNodes || []).every((related) => related.target[0] !== '#toast')))
+          .map((node) => node.target[0])
+          .filter((selector) => {
+              const element = document.querySelector(selector);
+              return element && element.closest(sheet);
+          });
+    }""", dialog)
+
+    assert not blind, f"axe cannot measure {len(blind)} element(s) inside the {name}: {blind[:4]}"
+
+
+
+def open_app_without_dialog_api(open_app, **options):
+    """The app as a WebView without <dialog> runs it (iOS before 15.4)."""
+    page = open_app(**options)
+    page.add_init_script(
+        "delete HTMLDialogElement.prototype.showModal; delete HTMLDialogElement.prototype.close;"
+    )
+    page.reload()
+    page.wait_for_selector(".event-card")
+    return page
+
+
+@pytest.mark.parametrize("name", ["composer", "picker", "day"])
+def test_without_native_dialogs_a_sheet_is_not_hidden_under_the_tab_bar(open_app, name):
+    """Without <dialog> there is no top layer, so plain z-index decides what is
+    on top. The overlays these dialogs replaced stood at z-index 41, 50 and 75;
+    without it, the tab bar and the Add button covered the bottom of the sheet.
+    """
+    page, dialog, _ = open_dialog(lambda **kw: open_app_without_dialog_api(open_app, **kw), name)
+    page.wait_for_timeout(300)
+
+    covered_by = page.evaluate("""(selector) => {
+        const box = document.querySelector(selector).getBoundingClientRect();
+        const y = Math.min(box.bottom, innerHeight) - 24;
+        const hit = document.elementFromPoint(box.left + box.width / 2, y);
+        if (hit && hit.closest(selector)) return null;
+        return hit ? (hit.id ? '#' + hit.id : String(hit.className || hit.tagName)) : 'nothing';
+    }""", dialog)
+
+    assert covered_by is None, f"the bottom of the {name} is covered by {covered_by}"
