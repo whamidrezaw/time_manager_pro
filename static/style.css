@@ -99,14 +99,25 @@
   --cat-other:    #78716c;
 
   /* Urgency Palette */
-  --tone-past:     #dc2626;
-  --tone-today:    #be185d;
-  --tone-critical: #ea580c;
-  --tone-soon:     #d97706;
-  --tone-warm:     #ca8a04;
-  --tone-cool:     #2563eb;
-  --tone-future:   #7c3aed;
-  --tone-long:     #16a34a;
+  --tone-past:     #be1f1f;
+  --tone-today:    #b9175b;
+  --tone-critical: #a53e08;
+  --tone-soon:     #9a5504;
+  --tone-warm:     #8b5f03;
+  --tone-cool:     #1759ea;
+  --tone-future:   #7a37ed;
+  --tone-long:     #107837;
+  /* Text on a badge or button tint (A11Y-05, option 1): each keeps its hue and
+     reads at 4.6:1 on its tint; dark themes get their own, lighter set. */
+  --ink-pink: #be185d;
+  --ink-work: #1d4ed8;
+  --ink-family: #bd3f0c;
+  --ink-health: #b91c1c;
+  --ink-travel: #0e7490;
+  --ink-finance: #147c3b;
+  --ink-study: #7e22ce;
+  --ink-share: #047b56;
+  --danger-ink: var(--tg-danger, #d01212);
 
   /* Shadows */
   --shadow-sm: 0 2px 12px rgba(91, 108, 248, 0.08);
@@ -140,6 +151,23 @@
    still overrides these fallbacks. */
 @media (prefers-color-scheme: dark) {
   :root {
+    --tone-past: #e76b6b;
+    --tone-today: #eb5d98;
+    --tone-critical: #f57d3e;
+    --tone-soon: #e77f06;
+    --tone-warm: #d08e04;
+    --tone-cool: #618ef0;
+    --tone-future: #a577f3;
+    --tone-long: #17ac4e;
+    --ink-pink: #eb619a;
+    --ink-work: #6e8fec;
+    --ink-family: #f26b33;
+    --ink-health: #e86868;
+    --ink-travel: #14a2c9;
+    --ink-finance: #1cac52;
+    --ink-study: #b376e8;
+    --ink-share: #06a775;
+    --danger-ink: var(--tg-danger, #f16161);
     --error-text: #fca5a5;
     --bg: var(--tg-bg, #0f1024);
     --surface: var(--tg-surface, #1a1d38);
@@ -154,6 +182,23 @@
 }
 
 :root[data-tg-scheme="dark"] {
+  --tone-past: #e76b6b;
+  --tone-today: #eb5d98;
+  --tone-critical: #f57d3e;
+  --tone-soon: #e77f06;
+  --tone-warm: #d08e04;
+  --tone-cool: #618ef0;
+  --tone-future: #a577f3;
+  --tone-long: #17ac4e;
+  --ink-pink: #eb619a;
+  --ink-work: #6e8fec;
+  --ink-family: #f26b33;
+  --ink-health: #e86868;
+  --ink-travel: #14a2c9;
+  --ink-finance: #1cac52;
+  --ink-study: #b376e8;
+  --ink-share: #06a775;
+  --danger-ink: var(--tg-danger, #f16161);
   --error-text: #fca5a5;
   --bg: var(--tg-bg, #0f1024);
   --surface: var(--tg-surface, #1a1d38);
@@ -168,6 +213,23 @@
 
 /* Telegram light while the OS is dark — undo the media query above. */
 :root[data-tg-scheme="light"] {
+  --tone-past: #be1f1f;
+  --tone-today: #b9175b;
+  --tone-critical: #a53e08;
+  --tone-soon: #9a5504;
+  --tone-warm: #8b5f03;
+  --tone-cool: #1759ea;
+  --tone-future: #7a37ed;
+  --tone-long: #107837;
+  --ink-pink: #be185d;
+  --ink-work: #1d4ed8;
+  --ink-family: #bd3f0c;
+  --ink-health: #b91c1c;
+  --ink-travel: #0e7490;
+  --ink-finance: #147c3b;
+  --ink-study: #7e22ce;
+  --ink-share: #047b56;
+  --danger-ink: var(--tg-danger, #d01212);
   --error-text: #b91c1c;
   --bg: var(--tg-bg, #f0f2ff);
   --surface: var(--tg-surface, #ffffff);
@@ -584,16 +646,16 @@ a { color: var(--link); }
   border-color: transparent;
 }
 
-.badge-pin { background: rgba(236,72,153,0.1); color: #be185d; border-color: rgba(236,72,153,0.2); }
+.badge-pin { background: rgba(236,72,153,0.1); color: var(--ink-pink); border-color: rgba(236,72,153,0.2); }
 
 /* Category badge colors */
-.badge-cat-birthday { background: rgba(236,72,153,0.1); color: #be185d; border-color: rgba(236,72,153,0.2); }
-.badge-cat-work     { background: rgba(59,130,246,0.1); color: #1d4ed8; border-color: rgba(59,130,246,0.2); }
-.badge-cat-family   { background: rgba(249,115,22,0.1); color: #c2410c; border-color: rgba(249,115,22,0.2); }
-.badge-cat-health   { background: rgba(239,68,68,0.1); color: #b91c1c; border-color: rgba(239,68,68,0.2); }
-.badge-cat-travel   { background: rgba(6,182,212,0.1); color: #0e7490; border-color: rgba(6,182,212,0.2); }
-.badge-cat-finance  { background: rgba(34,197,94,0.1); color: #15803d; border-color: rgba(34,197,94,0.2); }
-.badge-cat-study    { background: rgba(168,85,247,0.1); color: #7e22ce; border-color: rgba(168,85,247,0.2); }
+.badge-cat-birthday { background: rgba(236,72,153,0.1); color: var(--ink-pink); border-color: rgba(236,72,153,0.2); }
+.badge-cat-work     { background: rgba(59,130,246,0.1); color: var(--ink-work); border-color: rgba(59,130,246,0.2); }
+.badge-cat-family   { background: rgba(249,115,22,0.1); color: var(--ink-family); border-color: rgba(249,115,22,0.2); }
+.badge-cat-health   { background: rgba(239,68,68,0.1); color: var(--ink-health); border-color: rgba(239,68,68,0.2); }
+.badge-cat-travel   { background: rgba(6,182,212,0.1); color: var(--ink-travel); border-color: rgba(6,182,212,0.2); }
+.badge-cat-finance  { background: rgba(34,197,94,0.1); color: var(--ink-finance); border-color: rgba(34,197,94,0.2); }
+.badge-cat-study    { background: rgba(168,85,247,0.1); color: var(--ink-study); border-color: rgba(168,85,247,0.2); }
 
 /* Urgency badge */
 .urgency-badge {
@@ -840,7 +902,7 @@ dialog.sheet-host::backdrop {
 
 .btn-danger {
   background: rgba(239,68,68,0.1);
-  color: var(--danger);
+  color: var(--danger-ink);
   border-color: rgba(239,68,68,0.25);
 }
 .btn-danger:active { transform: scale(0.97); }
@@ -859,9 +921,9 @@ dialog.sheet-host::backdrop {
 }
 
 .btn-action-edit   { background: rgba(91,108,248,0.08); color: var(--brand-ink); border-color: rgba(91,108,248,0.2); }
-.btn-action-share  { background: rgba(16,185,129,0.08); color: #059669; border-color: rgba(16,185,129,0.2); }
-.btn-action-pin    { background: rgba(236,72,153,0.08); color: #be185d; border-color: rgba(236,72,153,0.2); }
-.btn-action-delete { background: rgba(239,68,68,0.08); color: var(--danger); border-color: rgba(239,68,68,0.2); }
+.btn-action-share  { background: rgba(16,185,129,0.08); color: var(--ink-share); border-color: rgba(16,185,129,0.2); }
+.btn-action-pin    { background: rgba(236,72,153,0.08); color: var(--ink-pink); border-color: rgba(236,72,153,0.2); }
+.btn-action-delete { background: rgba(239,68,68,0.08); color: var(--danger-ink); border-color: rgba(239,68,68,0.2); }
 .btn-action:active { transform: scale(0.96); }
 
 /* ── Detail Card ─────────────────────────────────────── */
@@ -1385,7 +1447,7 @@ dialog.ref-overlay::backdrop, dialog.invite-overlay::backdrop { background: tran
   letter-spacing: 0.02em; text-transform: uppercase;
   color: var(--text-muted);
 }
-.section-pinned   .event-section-label { color: #be185d; }
+.section-pinned   .event-section-label { color: var(--ink-pink); }
 .section-today    .event-section-label { color: var(--tone-today); }
 .section-tomorrow .event-section-label { color: var(--tone-critical); }
 
@@ -1828,7 +1890,7 @@ dialog.day-dialog::backdrop { background: rgba(10, 12, 30, 0.5); }
 .invite-title { margin: 8px 0 4px; font-size: 1.25rem; font-weight: 800; }
 .invite-date { margin: 0; font-size: 0.85rem; color: var(--text-2); }
 .invite-error {
-  margin: 14px 0 0; font-size: 0.82rem; color: var(--danger);
+  margin: 14px 0 0; font-size: 0.82rem; color: var(--danger-ink);
 }
 .invite-actions {
   display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;

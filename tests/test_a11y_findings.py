@@ -267,6 +267,69 @@ def test_field_errors_have_a_colour_that_meets_wcag_aa():
     assert not failures, "\n".join(failures)
 
 
+def _over(rgba: tuple, background: str) -> str:
+    """A translucent tint laid over an opaque background, as the browser paints it."""
+    r, g, b, a = rgba
+    base = [int(background[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(a * v + (1 - a) * w):02x}" for v, w in zip((r, g, b), base))
+
+
+def test_accent_text_meets_wcag_aa_on_its_own_background():
+    """A11Y-05, second half: every rule that puts coloured text on a tint of
+    its own (category and pin badges, urgency badges, the detail page's
+    buttons) reads at 4.5:1 or better, in light and dark.
+
+    Read from the stylesheet itself, so a badge added later is checked
+    without being listed. axe could not do this: it marked the animated and
+    overlapping badges incomplete and never reported that "3 days left" read
+    at 2.7:1. Dark themes are also checked on Telegram's common dark surfaces,
+    which are a shade lighter than the app's own.
+    """
+    css = STYLESHEET.read_text(encoding="utf-8")
+    base = _block(css, r"^:root\s*\{(.*?)^\}")
+    media_dark = _block(css, r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{(.*?)\}")
+    tg_dark = _block(css, r'^:root\[data-tg-scheme="dark"\]\s*\{(.*?)^\}')
+    tg_light = _block(css, r'^:root\[data-tg-scheme="light"\]\s*\{(.*?)^\}')
+    themes = {
+        "light": ({**base}, []),
+        "light [data-tg-scheme] on a dark phone": ({**base, **media_dark, **tg_light}, []),
+        "dark (media query)": ({**base, **media_dark}, ["#212121", "#17212b"]),
+        "dark [data-tg-scheme]": ({**base, **tg_dark}, ["#212121", "#17212b"]),
+    }
+    rules = []
+    for selector, body in re.findall(r"^([.#][^{}\n]+?)\s*\{([^{}]*)\}", css, re.M):
+        tint = re.search(r"background:\s*rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)", body)
+        colour = re.search(
+            r"(?<![-\w])color:\s*(#[0-9a-fA-F]{6}|var\(--[\w-]+(?:,\s*#[0-9a-fA-F]{6})?\))", body)
+        if tint and colour:
+            rgba = tuple(int(tint.group(i)) for i in (1, 2, 3)) + (float(tint.group(4)),)
+            rules.append((selector.strip(), colour.group(1), rgba))
+    labels = re.findall(r"^(\.section-\w+\s+\.event-section-label)\s*\{\s*color:\s*([^;]+);", css, re.M)
+    assert len(rules) >= 19 and len(labels) >= 3, (len(rules), len(labels))
+
+    def resolve(value: str, tokens: dict) -> str:
+        if value.startswith("#"):
+            return value
+        name = re.match(r"var\(--([\w-]+)", value).group(1)
+        return _hex({**tokens, "_": value}, "_") if name.startswith("tg-") else _hex(tokens, name)
+
+    failures = []
+    for theme, (tokens, telegram_surfaces) in themes.items():
+        surfaces = [_hex(tokens, "surface"), *telegram_surfaces]
+        for selector, value, rgba in rules:
+            text = resolve(value, tokens)
+            worst = min(contrast_ratio(text, _over(rgba, surface)) for surface in surfaces)
+            if worst < 4.5:
+                failures.append(f"{theme}: {selector} {text} = {worst:.2f}:1")
+        for selector, value in labels:
+            text = resolve(value.strip(), tokens)
+            ratio = contrast_ratio(text, _hex(tokens, "bg"))
+            if ratio < 4.5:
+                failures.append(f"{theme}: {selector} {text} on --bg = {ratio:.2f}:1")
+
+    assert not failures, f"{len(failures)} below 4.5:1:\n" + "\n".join(failures)
+
+
 # ── The public countdown page ────────────────────────────────────────────────
 
 @pytest.fixture

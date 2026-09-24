@@ -101,7 +101,10 @@ with no colour changed.
   only as far as 4.6:1 on every background it sits on, measured by axe in the
   real screens, not only on paper. The brand has two roles: `--brand` is a
   fill with white text on it in every theme, `--brand-ink` is the brand as
-  text, lighter in dark themes.
+  text, lighter in dark themes. Accent text (category and pin badges, the
+  urgency badges, the detail page's buttons) follows the same rule as
+  `--tone-*`, `--ink-*` and `--danger-ink` tokens with a dark set of their own,
+  and is checked against Telegram's common dark surfaces too.
 - **D12 — the year strip (Y1):** its day buttons stay as they look and click,
   but out of the Tab order; it sits inside `aria-hidden`, and the month grid
   is the keyboard way to the same day.
