@@ -197,6 +197,8 @@
       "Filters and search": "فیلتر و جست‌وجو",
       "Category filter": "فیلتر دسته",
       "Search events…": "جست‌وجوی رویداد…",
+      "Search events": "جست‌وجوی رویداد",
+      "Note and checklist": "یادداشت و چک‌لیست",
       "Event list": "فهرست رویدادها",
       "🌐 All": "🌐 همه",
       "📌 Pinned": "📌 سنجاق‌شده",
@@ -1881,7 +1883,10 @@
     els.filterButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const next = btn.dataset.filter || "all";
-        els.filterButtons.forEach((b) => b.classList.toggle("is-active", b === btn));
+        els.filterButtons.forEach((b) => {
+          b.classList.toggle("is-active", b === btn);
+          b.setAttribute("aria-pressed", String(b === btn));
+        });
         if (next === state.currentFilter) return;
 
         state.currentFilter = next;
@@ -2142,7 +2147,7 @@
     els.dpTabs.forEach((tab) => {
       const active = tab.dataset.calendar === dp.calendar;
       tab.classList.toggle("is-active", active);
-      tab.setAttribute("aria-selected", String(active));
+      tab.setAttribute("aria-pressed", String(active));
     });
     if (els.dpClear) els.dpClear.hidden = !allowClear;
 
@@ -2227,7 +2232,7 @@
       els.dpTabs.forEach((other) => {
         const active = other === tab;
         other.classList.toggle("is-active", active);
-        other.setAttribute("aria-selected", String(active));
+        other.setAttribute("aria-pressed", String(active));
       });
       dpRender();
     }));
@@ -2314,8 +2319,11 @@
       const active = tab.dataset.pane === name;
       tab.classList.toggle("is-active", active);
       tab.setAttribute("aria-selected", String(active));
+      // Only the selected tab is in the Tab order; the arrow keys reach the other.
+      tab.tabIndex = active ? 0 : -1;
     });
-    if (els.detailNote) els.detailNote.hidden = name !== "note";
+    const notePanel = document.getElementById("notePanel");
+    if (notePanel) notePanel.hidden = name !== "note";
 
     const pane = document.getElementById("checklistPane");
     if (pane) pane.hidden = name !== "checklist";
@@ -2409,8 +2417,23 @@
   }
 
   function bindChecklist() {
-    document.querySelectorAll(".pane-tab").forEach((tab) => {
+    const paneTabs = [...document.querySelectorAll(".pane-tab")];
+    paneTabs.forEach((tab, index) => {
       tab.addEventListener("click", () => showPane(tab.dataset.pane));
+      // The tab pattern: the arrows move between tabs and select as they go,
+      // Home and End jump to either end. Right and left swap in Persian.
+      tab.addEventListener("keydown", (e) => {
+        const rtl = document.documentElement.dir === "rtl";
+        const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];
+        let next = null;
+        if (step) next = paneTabs[(index + step + paneTabs.length) % paneTabs.length];
+        else if (e.key === "Home") next = paneTabs[0];
+        else if (e.key === "End") next = paneTabs[paneTabs.length - 1];
+        if (!next) return;
+        e.preventDefault();
+        showPane(next.dataset.pane);
+        next.focus();
+      });
     });
     document.getElementById("checklistAdd")?.addEventListener("click", addChecklistItem);
     document.getElementById("checklistInput")?.addEventListener("keydown", (e) => {

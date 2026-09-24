@@ -217,6 +217,14 @@ a { color: var(--link); }
   border: 0; padding: 0; white-space: nowrap;
   clip-path: inset(50%); overflow: hidden;
 }
+/* The skip link is the first Tab stop, so it has to be seen once it has focus. */
+.sr-only:focus {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); inset-inline-start: 8px;
+  z-index: 100; width: auto; height: auto; margin: 0; padding: 10px 14px;
+  clip-path: none; overflow: visible;
+  background: var(--surface); color: var(--text);
+  border: 2px solid var(--brand); border-radius: var(--r-sm);
+}
 
 /* ── Noscript ────────────────────────────────────────── */
 .noscript-box {
@@ -272,6 +280,14 @@ a { color: var(--link); }
   transition: all 150ms ease;
 }
 .icon-btn:active { transform: scale(0.93); }
+
+/* Primary controls answer to a 44 x 44 px touch area (decision D3) without
+   growing: an invisible ::after reaches past the visible edge. The icon
+   buttons are 42 px square and the filter chips 39 px tall. The inset counts
+   from inside the 1 px border, so it is 1 px more than the gap it covers. */
+.icon-btn, .seg-btn { position: relative; }
+.icon-btn::after { content: ""; position: absolute; inset: -3px; }
+.seg-btn::after { content: ""; position: absolute; inset: -4px 0; }
 
 /* ── Main ────────────────────────────────────────────── */
 .app-main {
@@ -344,6 +360,9 @@ a { color: var(--link); }
 .toolbar-row {
   display: flex; gap: 8px;
   overflow-x: auto; padding-bottom: 4px;
+  /* A scroll box clips what reaches outside it: room for the chips' touch
+     area above them, with the margin taking the row back to where it was. */
+  padding-top: 3px; margin-top: -3px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -1860,6 +1879,9 @@ dialog.day-dialog::backdrop { background: rgba(10, 12, 30, 0.5); }
 }
 
 .checklist { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* The note's tab panel passes the flex sizing through, so the textarea fills
+   the space exactly as it did before it had a panel around it. */
+.note-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .checklist-items { flex: 1; min-height: 0; overflow-y: auto; }
 
 .check-row {

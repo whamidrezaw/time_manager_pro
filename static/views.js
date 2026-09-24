@@ -202,7 +202,9 @@
       var dayIso = meta.toIso(day);
       var isToday = onToday && day === today.d;
       html += '<button type="button" class="cal-day' + (isToday ? " is-today" : "")
-        + '" data-iso="' + dayIso + '"><span class="cal-num">' + num(day)
+        + '" data-iso="' + dayIso + '" aria-label="' + num(day) + " " + meta.label + '"'
+        + (isToday ? ' aria-current="date"' : "")
+        + '><span class="cal-num">' + num(day)
         + '</span><span class="cal-dots" data-dots="' + dayIso + '"></span></button>';
     }
     html += "</div>";

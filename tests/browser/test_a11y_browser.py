@@ -241,20 +241,69 @@ def test_muted_text_stays_readable_under_a_low_contrast_telegram_theme(open_app,
 
 
 def test_primary_controls_are_at_least_44_css_pixels(open_app):
-    """A11Y-03 / decision D3: 44x44 for primary controls (2.5.5, AAA; 24x24 is the AA floor).
+    """A11Y-03 / decision D3: primary controls answer to a 44x44 px touch area.
 
+    Decided in Batch 20: the visible size stays, and an invisible margin around
+    each control makes up the difference. So this measures what a finger meets,
+    not the painted box: the edges and corners of a 44x44 square centred on the
+    control must all land on the control itself (2.5.5; 24x24 is the AA floor).
     Measured in the review: refresh and invite buttons 42x42, filter chips 39 px tall.
     """
     page = open_app()
     too_small = page.evaluate("""(selectors) => selectors
         .flatMap((s) => [...document.querySelectorAll(s)])
         .filter((e) => e.checkVisibility())
-        .map((e) => { const r = e.getBoundingClientRect();
-            return [e.id || e.dataset.filter || e.dataset.view, Math.round(r.width), Math.round(r.height)]; })
-        .filter(([, w, h]) => w < 44 || h < 44)""",
+        .filter((e) => {
+            e.scrollIntoView({ block: 'center', inline: 'center' });
+            const r = e.getBoundingClientRect();
+            const x = r.left + r.width / 2, y = r.top + r.height / 2, reach = 21.5;
+            return [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+                .some(([dx, dy]) => {
+                    const hit = document.elementFromPoint(x + dx * reach, y + dy * reach);
+                    return !(hit && (hit === e || e.contains(hit)));
+                });
+        })
+        .map((e) => e.id || e.dataset.filter || e.dataset.view)""",
         ["#refreshBtn", "#refOpenBtn", "#openComposerBtn", ".seg-btn", ".tab"])
 
-    assert not too_small, f"[control, width, height] below 44 px: {too_small}"
+    assert not too_small, f"controls whose 44x44 touch area misses them: {too_small}"
+
+
+def test_the_note_and_checklist_tabs_work_like_tabs(open_app):
+    """A11Y-03 / 4.1.2, decided in Batch 20: note and checklist are two panels,
+    so they get the whole tab pattern: each tab controls its panel, only the
+    selected tab is in the Tab order, and the arrow keys move between tabs."""
+    page = open_app()
+    page.focus(".event-card >> nth=0")
+    page.keyboard.press("Enter")
+    expect(page.locator("#detailSheet")).to_be_visible()
+
+    note_tab = page.locator(".pane-tab[data-pane=note]")
+    checklist_tab = page.locator(".pane-tab[data-pane=checklist]")
+    expect(note_tab).to_have_attribute("tabindex", "0", timeout=FAST)
+    expect(checklist_tab).to_have_attribute("tabindex", "-1")
+
+    note_tab.focus()
+    page.keyboard.press("ArrowRight")
+
+    expect(checklist_tab).to_be_focused(timeout=FAST)
+    expect(checklist_tab).to_have_attribute("aria-selected", "true")
+    expect(page.locator("#checklistPane")).to_be_visible()
+    expect(page.locator("#detailNote")).to_be_hidden()
+
+
+def test_the_calendar_switch_says_which_calendar_is_shown(open_app):
+    """A11Y-03 / 4.1.2, decided in Batch 20: Gregorian/Jalali switches the same
+    wheels, with no panel of its own, so it is a pair of toggle buttons."""
+    page, _ = open_dialog(open_app, "composer")
+    page.click("#date")
+    expect(page.locator("#dpOverlay")).to_be_visible()
+    page.click(".dp-tab[data-calendar=jalali]")
+
+    jalali = page.locator(".dp-tab[data-calendar=jalali]")
+    gregorian = page.locator(".dp-tab[data-calendar=gregorian]")
+    expect(jalali).to_have_attribute("aria-pressed", "true", timeout=FAST)
+    expect(gregorian).to_have_attribute("aria-pressed", "false")
 
 
 # ── Clean console under the production CSP ───────────────────────────────────

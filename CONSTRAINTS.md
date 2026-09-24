@@ -48,7 +48,9 @@ with no colour changed.
   (A11Y-02), in one commit.
 - **D3 — target size:** 44×44 px for primary controls. That is WCAG 2.5.5
   (AAA) and the agent-skills checklist. The AA floor, 24×24 px (WCAG 2.2
-  2.5.8), is already met everywhere measured.
+  2.5.8), is already met everywhere measured. Delivered as an invisible touch
+  area (an `::after` past the visible edge), so nothing grows; the test measures
+  what a finger meets with `elementFromPoint`, not the painted box.
 - **D4 — Telegram themes:** the app corrects a hint or subtitle colour that
   falls below 4.5:1 against the theme background, instead of passing it
   through. The user's theme is not the app's to choose, but readable text is.

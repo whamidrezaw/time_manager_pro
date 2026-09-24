@@ -76,22 +76,22 @@
     <!-- Toolbar -->
     <section class="toolbar" aria-label="Filters and search">
       <div class="toolbar-row" id="filterRow" role="group" aria-label="Category filter">
-        <button type="button" class="seg-btn is-active" data-filter="all">🌐 All</button>
-        <button type="button" class="seg-btn" data-filter="pinned">📌 Pinned</button>
-        <button type="button" class="seg-btn" data-filter="birthday">🎂 Birthday</button>
-        <button type="button" class="seg-btn" data-filter="work">💼 Work</button>
-        <button type="button" class="seg-btn" data-filter="health">❤️ Health</button>
-        <button type="button" class="seg-btn" data-filter="family">👨‍👩‍👧 Family</button>
-        <button type="button" class="seg-btn" data-filter="travel">✈️ Travel</button>
-        <button type="button" class="seg-btn" data-filter="finance">💰 Finance</button>
-        <button type="button" class="seg-btn" data-filter="study">📚 Study</button>
-        <button type="button" class="seg-btn" data-filter="past">🗄️ Past</button>
+        <button type="button" class="seg-btn is-active" data-filter="all" aria-pressed="true">🌐 All</button>
+        <button type="button" class="seg-btn" data-filter="pinned" aria-pressed="false">📌 Pinned</button>
+        <button type="button" class="seg-btn" data-filter="birthday" aria-pressed="false">🎂 Birthday</button>
+        <button type="button" class="seg-btn" data-filter="work" aria-pressed="false">💼 Work</button>
+        <button type="button" class="seg-btn" data-filter="health" aria-pressed="false">❤️ Health</button>
+        <button type="button" class="seg-btn" data-filter="family" aria-pressed="false">👨‍👩‍👧 Family</button>
+        <button type="button" class="seg-btn" data-filter="travel" aria-pressed="false">✈️ Travel</button>
+        <button type="button" class="seg-btn" data-filter="finance" aria-pressed="false">💰 Finance</button>
+        <button type="button" class="seg-btn" data-filter="study" aria-pressed="false">📚 Study</button>
+        <button type="button" class="seg-btn" data-filter="past" aria-pressed="false">🗄️ Past</button>
       </div>
       <label class="search-wrap" for="searchInput">
         <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
-        <input type="search" id="searchInput" class="search-input" placeholder="Search events…" autocomplete="off" inputmode="search">
+        <input type="search" id="searchInput" class="search-input" aria-label="Search events" placeholder="Search events…" autocomplete="off" inputmode="search">
       </label>
     </section>
 
@@ -428,20 +428,24 @@
       </div>
 
       <div class="field-group">
-        <div class="pane-tabs" role="tablist">
-          <button type="button" class="pane-tab is-active" data-pane="note" role="tab" aria-selected="true">
+        <div class="pane-tabs" role="tablist" aria-label="Note and checklist">
+          <button type="button" class="pane-tab is-active" data-pane="note" role="tab" aria-selected="true"
+                  id="noteTab" aria-controls="notePanel" tabindex="0">
             <span data-i18n>Note</span>
           </button>
-          <button type="button" class="pane-tab" data-pane="checklist" role="tab" aria-selected="false">
+          <button type="button" class="pane-tab" data-pane="checklist" role="tab" aria-selected="false"
+                  id="checklistTab" aria-controls="checklistPane" tabindex="-1">
             <span data-i18n>Checklist</span>
             <span class="pane-count" id="checklistCount" hidden></span>
           </button>
         </div>
-        <textarea id="detailNote" class="field-input field-textarea" rows="6" maxlength="2000" placeholder="Write a note or any details…"></textarea>
-        <div class="checklist" id="checklistPane" hidden>
+        <div class="note-panel" id="notePanel" role="tabpanel" aria-labelledby="noteTab">
+        <textarea id="detailNote" class="field-input field-textarea" rows="6" maxlength="2000" aria-label="Note" placeholder="Write a note or any details…"></textarea>
+        </div>
+        <div class="checklist" id="checklistPane" role="tabpanel" aria-labelledby="checklistTab" hidden>
           <div class="checklist-items" id="checklistItems"></div>
           <div class="checklist-add">
-            <input type="text" id="checklistInput" class="field-input" maxlength="200" placeholder="Add an item" />
+            <input type="text" id="checklistInput" class="field-input" maxlength="200" aria-label="Add an item" placeholder="Add an item" />
             <button type="button" class="btn-primary checklist-add-btn" id="checklistAdd" aria-label="Add item">+</button>
           </div>
         </div>
@@ -477,9 +481,11 @@
 
     <div class="dp-head">
       <h2 class="sheet-title" id="dpTitle" tabindex="-1" autofocus>Pick a date</h2>
-      <div class="dp-tabs" role="tablist" aria-label="Calendar">
-        <button type="button" class="dp-tab is-active" data-calendar="gregorian" role="tab" aria-selected="true">Gregorian</button>
-        <button type="button" class="dp-tab" data-calendar="jalali" role="tab" aria-selected="false">Jalali</button>
+      <!-- Toggle buttons, not tabs: both switch the same wheels, and there is
+           no panel of their own for a tab to control. -->
+      <div class="dp-tabs" role="group" aria-label="Calendar">
+        <button type="button" class="dp-tab is-active" data-calendar="gregorian" aria-pressed="true">Gregorian</button>
+        <button type="button" class="dp-tab" data-calendar="jalali" aria-pressed="false">Jalali</button>
       </div>
     </div>
 
