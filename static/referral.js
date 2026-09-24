@@ -28,7 +28,7 @@
     "You have reached the highest limit. Thank you!": "به بالاترین سقف رسیده‌اید. ممنون از شما!",
     "{valid} joined": "{valid} نفر پیوسته‌اند",
     "{pending} on the way": "{pending} نفر در راه",
-    "Running out of space": "جا دارد تمام می‌شود",
+    "You've reached your event limit": "به سقف رویدادهایت رسیدی",
     "You've used {used} of your {limit} events. Invite friends to get more.":
       "{used} از {limit} رویداد شما استفاده شده است. با دعوت دوستان سقف را بالا ببرید.",
     "Invite now": "همین حالا دعوت کن",
@@ -214,8 +214,9 @@
     var existing = document.getElementById("refNudge");
     if (!main || !state) return;
 
-    var ratio = state.limit > 0 ? state.used / state.limit : 0;
-    if (state.at_cap || ratio < NEAR_LIMIT_RATIO) {
+    // Only once the limit is reached (Batch 20): below it the list keeps the
+    // room, and at the hard ceiling invites cannot raise it any more.
+    if (state.at_cap || state.used < state.limit) {
       if (existing) existing.remove();
       return;
     }
@@ -225,7 +226,7 @@
     card.className = "ref-nudge";
     card.id = "refNudge";
     card.innerHTML =
-      '<div class="ref-nudge-body"><strong>' + t("Running out of space") + "</strong>" +
+      '<div class="ref-nudge-body"><strong>' + t("You've reached your event limit") + "</strong>" +
       "<p>" +
       t("You've used {used} of your {limit} events. Invite friends to get more.", {
         used: num(state.used),

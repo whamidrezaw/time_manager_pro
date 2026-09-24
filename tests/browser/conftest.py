@@ -134,6 +134,7 @@ class FakeTelegramBot:
     Messages land in `sent` instead of a chat; any other call does nothing."""
 
     sent: list[dict] = []
+    delay = 0  # seconds a message takes to go out, for a test that needs a slow Telegram
 
     def __init__(self, *args, **kwargs):
         pass
@@ -145,6 +146,8 @@ class FakeTelegramBot:
         return False
 
     async def send_message(self, **kwargs):
+        if FakeTelegramBot.delay:
+            await asyncio.sleep(FakeTelegramBot.delay)
         FakeTelegramBot.sent.append(kwargs)
 
     def __getattr__(self, name):
@@ -264,9 +267,13 @@ def open_app(browser, live_server):
     opened: list[tuple[object, bool]] = []
 
     def factory(*, lang="en", scheme="light", theme=None, width=390,
-                onboarding_seen=True, telegram=True, invite=False):
+                onboarding_seen=True, telegram=True, invite=False, extra_events=0):
         user_id = next(_users)
         seeded = [live_server.run(seed_event(user_id=str(user_id), **event)) for event in default_events()]
+        for n in range(extra_events):  # fillers, for a user near or at the event limit
+            live_server.run(seed_event(user_id=str(user_id), title=f"Filler {n + 1}",
+                                       date_iso=(date.today() + timedelta(days=60 + n)).isoformat(),
+                                       event_ts_utc=utc(days=60 + n)))
         start_param = ""
         if invite:
             # Opened from a friend's ?startapp=s_<token> link to "Book club".

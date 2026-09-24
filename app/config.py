@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # Batch 12a. max_events_per_user is now the hard ceiling nobody passes;
     # what a given user may actually store is base + bonus per referral step,
     # computed in app/services/referrals.py.
-    event_limit_base: int = Field(default=20, alias="EVENT_LIMIT_BASE")
+    event_limit_base: int = Field(default=25, alias="EVENT_LIMIT_BASE")  # 25 since Batch 20
     referral_step: int = Field(default=3, alias="REFERRAL_STEP")
     referral_bonus: int = Field(default=20, alias="REFERRAL_BONUS")
     rate_limit_count: int = Field(default=30, alias="RATE_LIMIT_COUNT")

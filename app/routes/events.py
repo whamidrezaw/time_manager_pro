@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from telegram import Bot
 
 from app.config import get_settings
@@ -54,21 +54,28 @@ async def api_list(request: Request, payload: ListEventsRequest) -> ListEventsRe
     )
 
 
-@router.post("/add", response_model=EventMutationResponse)
-async def api_add(request: Request, payload: AddEventRequest) -> EventMutationResponse:
-    user_id = await get_authenticated_user_id(request, payload.initData)
-    await add_event_for_user(user_id, payload)
+async def _confirm_in_telegram(user_id: str, title: str) -> None:
+    """The chat message that confirms a new event.
 
+    Sent after the answer (Batch 20, decision S1): the answer used to wait for
+    it, so a slow or unreachable Telegram held the composer open for as long
+    as the client's timeouts. A failure is logged, as before.
+    """
     settings = get_settings()
     try:
         async with Bot(token=settings.bot_token) as bot:
-            await bot.send_message(
-                chat_id=user_id,
-                text=f'✅ Event "{payload.title}" was saved successfully.',
-            )
+            await bot.send_message(chat_id=user_id, text=f'✅ Event "{title}" was saved successfully.')
     except Exception as exc:
         logger.warning("Confirmation message failed: user_id=%s error=%s", user_id, exc)
 
+
+@router.post("/add", response_model=EventMutationResponse)
+async def api_add(
+    request: Request, payload: AddEventRequest, background: BackgroundTasks
+) -> EventMutationResponse:
+    user_id = await get_authenticated_user_id(request, payload.initData)
+    await add_event_for_user(user_id, payload)
+    background.add_task(_confirm_in_telegram, user_id, payload.title)
     return EventMutationResponse(success=True)
 
 
