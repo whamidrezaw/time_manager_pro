@@ -1370,8 +1370,31 @@
     if (els.repeatUntil && els.date?.value) els.repeatUntil.min = els.date.value;
   }
 
+  // A11Y-06: a validation error stays on its field, visible and in the
+  // accessibility tree, until the user changes that field. It used to be a
+  // toast that was gone after 2.8 s.
+  function showFieldError(input, message) {
+    const box = input && document.getElementById(`${input.id}Error`);
+    if (!box) { showToast(message, "error"); return; }
+    box.textContent = message;
+    box.hidden = false;
+    input.setAttribute("aria-invalid", "true");
+    input.setAttribute("aria-describedby", box.id);
+    input.focus();
+  }
+
+  function clearFieldError(input) {
+    const box = input && document.getElementById(`${input.id}Error`);
+    if (!box || box.hidden) return;
+    box.hidden = true;
+    box.textContent = "";
+    input.removeAttribute("aria-invalid");
+    input.removeAttribute("aria-describedby");
+  }
+
   function resetComposer() {
     els.eventForm?.reset();
+    [els.title, els.date, els.eventTime].forEach(clearFieldError);
     if (els.eventId)        els.eventId.value       = "";
     if (els.dateJalali)     els.dateJalali.value     = "";
     if (els.noteCharCount)  els.noteCharCount.textContent = "0 / 2000";
@@ -1548,18 +1571,15 @@
     };
 
     if (!payload.title) {
-      showToast(t("Please enter an event title."), "error");
-      els.title?.focus();
+      showFieldError(els.title, t("Please enter an event title."));
       return;
     }
     if (!payload.date) {
-      showToast(t("Please select a date."), "error");
-      els.date?.focus();
+      showFieldError(els.date, t("Please select a date."));
       return;
     }
     if (!allDay && !eventTime) {
-      showToast(t("Please set the event time, or mark it as an all-day event."), "error");
-      els.eventTime?.focus();
+      showFieldError(els.eventTime, t("Please set the event time, or mark it as an all-day event."));
       return;
     }
 
@@ -1888,6 +1908,10 @@
     els.date?.addEventListener("change", updateRepeatUntilVisibility);
     els.repeat?.addEventListener("change", updateRepeatUntilVisibility);
     els.allDay?.addEventListener("change", updateAllDayVisibility);
+    // A field's error leaves as soon as that field changes.
+    els.allDay?.addEventListener("change", () => clearFieldError(els.eventTime));
+    els.title?.addEventListener("input", () => clearFieldError(els.title));
+    els.eventTime?.addEventListener("input", () => clearFieldError(els.eventTime));
     els.dateJalali?.addEventListener("change", syncGregorianFromJalali);
     els.dateJalali?.addEventListener("blur",   syncGregorianFromJalali);
 
@@ -2199,6 +2223,7 @@
   }
 
   function setEventDate(iso) {
+    clearFieldError(els.date);
     if (els.date) els.date.value = iso;
     if (els.dateJalali) {
       if (!iso) { els.dateJalali.value = ""; return; }

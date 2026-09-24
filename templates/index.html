@@ -205,6 +205,7 @@
           Event Title
         </label>
         <input type="text" id="title" class="field-input" placeholder="e.g. Mom's Birthday" maxlength="200" autocomplete="off" required>
+        <p class="field-error" id="titleError" hidden></p>
       </div>
 
       <div class="grid-2">
@@ -215,6 +216,7 @@
           </label>
           <input type="text" id="date" class="field-input field-picker" required
                  readonly inputmode="none" aria-haspopup="dialog" autocomplete="off" placeholder="2026-04-20">
+          <p class="field-error" id="dateError" hidden></p>
         </div>
         <div class="field-group">
           <label class="field-label" for="date-jalali">
@@ -306,6 +308,7 @@
             Event Time
           </label>
           <input type="time" id="eventTime" class="field-input" value="09:00">
+          <p class="field-error" id="eventTimeError" hidden></p>
         </div>
         <div class="field-group" id="reminderTimeWrap">
           <label class="field-label" for="reminderTime">

@@ -75,6 +75,10 @@ with no colour changed.
 - **D9 — list status:** filters and searches announce how many events they
   leave, in a short status of its own; loading and reloading stay quiet.
 
+- **D10 — validation errors:** shown under their field, visible, and only while
+  the field is invalid; they replace the toast for these three checks, so a
+  screen reader does not hear the same error twice.
+
 ## Exceptions
 
 | ID | Rule | Path | Reason | Owner | Expires |

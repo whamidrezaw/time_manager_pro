@@ -77,6 +77,8 @@
   /* Semantic */
   --danger: var(--tg-danger, #ef4444);
   --danger-soft: rgba(239, 68, 68, 0.1);
+  /* Text under a field in error: --danger is 3.8:1 on white, too faint for small text. */
+  --error-text: #b91c1c;
   --success: #10b981;
   --warning: #f59e0b;
   --link: var(--tg-link, #5b6cf8);
@@ -134,6 +136,7 @@
    still overrides these fallbacks. */
 @media (prefers-color-scheme: dark) {
   :root {
+    --error-text: #fca5a5;
     --bg: var(--tg-bg, #0f1024);
     --surface: var(--tg-surface, #1a1d38);
     --surface-2: var(--tg-bg-2, #1f2340);
@@ -146,6 +149,7 @@
 }
 
 :root[data-tg-scheme="dark"] {
+  --error-text: #fca5a5;
   --bg: var(--tg-bg, #0f1024);
   --surface: var(--tg-surface, #1a1d38);
   --surface-2: var(--tg-bg-2, #1f2340);
@@ -158,6 +162,7 @@
 
 /* Telegram light while the OS is dark — undo the media query above. */
 :root[data-tg-scheme="light"] {
+  --error-text: #b91c1c;
   --bg: var(--tg-bg, #f0f2ff);
   --surface: var(--tg-surface, #ffffff);
   --surface-2: var(--tg-bg-2, #f7f8ff);
@@ -737,6 +742,13 @@ dialog.sheet-host::backdrop {
 .sheet-form, .detail-card { display: flex; flex-direction: column; gap: 16px; }
 
 .field-group { display: flex; flex-direction: column; gap: 6px; text-align: start; }
+
+/* The message under a field in error (A11Y-06): shown only while the field is
+   invalid, gone as soon as the user changes it. */
+.field-error {
+  margin: 6px 0 0; font-size: 0.8rem; font-weight: 600; line-height: 1.35;
+  color: var(--error-text);
+}
 
 .field-label {
   display: flex; align-items: center; gap: 6px;

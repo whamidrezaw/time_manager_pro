@@ -226,6 +226,39 @@ def test_the_fallback_palette_meets_wcag_aa_text_contrast():
     assert not failures, "below 4.5:1:\n" + "\n".join(failures)
 
 
+def test_field_errors_have_a_colour_that_meets_wcag_aa():
+    """A11Y-06: the message under a field has its own colour. --danger is
+    #ef4444, 3.8:1 on white, too faint for small text; --error-text must reach
+    4.5:1 on the sheet's surface in every theme.
+
+    The Telegram-light case includes the dark media query underneath it: on a
+    phone in dark mode with Telegram set to light, only the light block can
+    take a dark value back.
+    """
+    css = STYLESHEET.read_text(encoding="utf-8")
+    base = _block(css, r"^:root\s*\{(.*?)^\}")
+    media_dark = _block(css, r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{(.*?)\}")
+    tg_dark = _block(css, r'^:root\[data-tg-scheme="dark"\]\s*\{(.*?)^\}')
+    tg_light = _block(css, r'^:root\[data-tg-scheme="light"\]\s*\{(.*?)^\}')
+    themes = {
+        "light": base,
+        "dark (media query)": {**base, **media_dark},
+        "dark [data-tg-scheme]": {**base, **media_dark, **tg_dark},
+        "light [data-tg-scheme] on a dark phone": {**base, **media_dark, **tg_light},
+    }
+
+    failures = []
+    for theme, tokens in themes.items():
+        if "error-text" not in tokens:
+            failures.append(f"{theme}: no --error-text")
+            continue
+        ratio = contrast_ratio(_hex(tokens, "error-text"), _hex(tokens, "surface"))
+        if ratio < 4.5:
+            failures.append(f"{theme}: --error-text on --surface = {ratio:.2f}:1")
+
+    assert not failures, "\n".join(failures)
+
+
 # ── The public countdown page ────────────────────────────────────────────────
 
 @pytest.fixture

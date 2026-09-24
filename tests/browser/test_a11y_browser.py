@@ -249,6 +249,42 @@ def test_a_missing_title_is_reported_on_the_field_itself(open_app):
     assert message, "no error message is connected to the field through aria-describedby"
 
 
+def test_a_field_error_stays_until_the_field_changes(open_app):
+    """A11Y-06 / 3.3.1, decided in Batch 20: the message is visible under its
+    field and stays there. The old toast was gone after 2.8 s; this one leaves
+    only when the user edits the field."""
+    page, _ = open_dialog(open_app, "composer")
+    page.click("#saveEventBtn")
+    error = page.locator("#titleError")
+    expect(error).to_be_visible(timeout=FAST)
+    page.wait_for_timeout(3200)
+
+    expect(error).to_be_visible()
+    expect(error).not_to_have_text("")
+    page.fill("#title", "Dentist")
+    expect(error).to_be_hidden(timeout=FAST)
+    expect(page.locator("#title")).not_to_have_attribute("aria-invalid", "true")
+
+
+@pytest.mark.parametrize("field", ["date", "eventTime"])
+def test_the_other_required_fields_report_their_error_the_same_way(open_app, field):
+    """A11Y-06: the date, and the time of an event that is not all-day, are
+    checked, marked and described the same way as the title."""
+    page, _ = open_dialog(open_app, "composer")
+    page.fill("#title", "Team lunch")
+    if field == "eventTime":
+        page.click("#date")
+        page.click("#dpConfirm")
+        expect(page.locator("#dpOverlay")).to_be_hidden(timeout=FAST)
+        page.uncheck("#allDay")
+        page.evaluate("() => { document.getElementById('eventTime').value = ''; }")
+    page.click("#saveEventBtn")
+
+    expect(page.locator(f"#{field}")).to_have_attribute("aria-invalid", "true", timeout=FAST)
+    expect(page.locator(f"#{field}Error")).to_be_visible()
+    expect(page.locator(f"#{field}")).to_have_attribute("aria-describedby", f"{field}Error")
+
+
 # ── External opinion: axe-core ───────────────────────────────────────────────
 
 @pytest.mark.parametrize("state", ["list-light", "list-dark", "composer", "detail", "month"])
