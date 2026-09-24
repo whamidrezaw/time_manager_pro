@@ -14,6 +14,14 @@ file is not weakened in the same commit as a change that was failing it.
 - No new ruff exclusions or `# noqa` for test files.
 - Tightening this file is quiet. Loosening it is a reviewed change of its own.
 
+- **Known failures.** A batch may carry failing tests on purpose, but only
+  the ones in `tests/known_failures.txt`. On `fix/**` branches CI runs
+  `scripts/check_known_failures.py`, which fails on any other failure and on a
+  listed test that passes; each fix removes its lines. `main` and pull
+  requests into it run the full suite, where the list has to be empty. This is
+  not a way around the rule above: nothing is skipped or marked, the tests
+  stay red and are counted as red.
+
 ## Enforced with numbers
 
 | Dimension | Rule | Checked by | Runs at |
