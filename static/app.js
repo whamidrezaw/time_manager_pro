@@ -495,6 +495,46 @@
     destructive_text_color:  "--tg-danger",
   };
 
+  // D4 (Batch 20): the app cannot choose the user's Telegram theme, so a text
+  // colour that theme hands over is used only once it reads at 4.5:1 on the
+  // backgrounds it sits on. One that does not keeps its hue and moves towards
+  // black, or towards white on a dark theme, only as far as it takes.
+  const READABLE_TEXT_PARAMS = ["subtitle_text_color", "hint_color", "link_color", "destructive_text_color"];
+
+  function hexToRgb(hex) {
+    const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex).trim());
+    if (!match) return null;
+    const h = match[1].length === 3 ? match[1].replace(/./g, (c) => c + c) : match[1];
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  }
+
+  function luminance(rgb) {
+    const [r, g, b] = rgb.map((v) => {
+      const c = v / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  function contrastRatio(a, b) {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  function readableOn(colour, backgrounds) {
+    const rgb = hexToRgb(colour);
+    const bgs = backgrounds.map(hexToRgb).filter(Boolean);
+    if (!rgb || !bgs.length) return colour;
+    const worst = (c) => Math.min(...bgs.map((bg) => contrastRatio(c, bg)));
+    if (worst(rgb) >= 4.5) return colour;
+    const towards = luminance(bgs[0]) > 0.18 ? 0 : 255;
+    for (let t = 0.02; t <= 1; t += 0.02) {
+      const moved = rgb.map((v) => Math.round(v + (towards - v) * t));
+      if (worst(moved) >= 4.6) return "#" + moved.map((v) => v.toString(16).padStart(2, "0")).join("");
+    }
+    return towards === 0 ? "#000000" : "#ffffff";
+  }
+
   function initTelegram() {
     try {
       applyTelegramTheme();
@@ -507,10 +547,20 @@
     const root = document.documentElement;
     const params = tg?.themeParams || {};
 
+    // The backgrounds text sits on: the theme's own, else the stylesheet's.
+    const backgrounds = ["bg_color", "secondary_bg_color", "section_bg_color"]
+      .map((key) => params[key])
+      .filter((v) => typeof v === "string" && v.trim());
+    if (!backgrounds.length) {
+      backgrounds.push(...(tg?.colorScheme === "dark" ? ["#1a1d38", "#0f1024"] : ["#ffffff", "#f0f2ff"]));
+    }
+
     Object.entries(TG_THEME_MAP).forEach(([key, cssVar]) => {
       const value = params[key];
       if (typeof value === "string" && value.trim()) {
-        root.style.setProperty(cssVar, value.trim());
+        const colour = value.trim();
+        root.style.setProperty(cssVar,
+          READABLE_TEXT_PARAMS.includes(key) ? readableOn(colour, backgrounds) : colour);
       } else {
         // Client didn't send this one — drop back to the stylesheet default
         // instead of keeping a stale value from the previous theme.

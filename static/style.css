@@ -56,11 +56,15 @@
 /* ── Design Tokens ─────────────────────────────────────── */
 :root {
   /* Brand */
-  --brand: #5b6cf8;
+  /* Option 1 (Batch 20): each colour keeps its hue and moves only as far as
+     4.6:1 on every background it sits on. --brand is a fill with white text
+     on it, in every theme; --brand-ink is the brand as text, lighter in dark. */
+  --brand: #4356f7;
   --brand-2: #8b5cf6;
   --brand-grad: linear-gradient(135deg, #5b6cf8 0%, #8b5cf6 100%);
   --brand-soft: rgba(91, 108, 248, 0.12);
   --brand-text: #ffffff;
+  --brand-ink: var(--brand);
 
   /* Surfaces — Telegram first, original palette as fallback */
   --bg: var(--tg-bg, #f0f2ff);
@@ -72,7 +76,7 @@
   /* Text — Telegram first, original palette as fallback */
   --text: var(--tg-text, #1a1d3a);
   --text-2: var(--tg-text-2, #4a4e78);
-  --text-muted: var(--tg-text-muted, #8890b8);
+  --text-muted: var(--tg-text-muted, #606aa0);
 
   /* Semantic */
   --danger: var(--tg-danger, #ef4444);
@@ -143,7 +147,8 @@
     --border: var(--tg-border, rgba(91, 108, 248, 0.18));
     --text: var(--tg-text, #eef0ff);
     --text-2: var(--tg-text-2, #a8b0d8);
-    --text-muted: var(--tg-text-muted, #5a6090);
+    --text-muted: var(--tg-text-muted, #8e93b8);
+    --brand-ink: #7d8bf9;
     --shadow-card: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
   }
 }
@@ -156,7 +161,8 @@
   --border: var(--tg-border, rgba(91, 108, 248, 0.18));
   --text: var(--tg-text, #eef0ff);
   --text-2: var(--tg-text-2, #a8b0d8);
-  --text-muted: var(--tg-text-muted, #5a6090);
+  --text-muted: var(--tg-text-muted, #8e93b8);
+  --brand-ink: #7d8bf9;
   --shadow-card: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px var(--border);
 }
 
@@ -169,7 +175,8 @@
   --border: var(--tg-border, rgba(91, 108, 248, 0.13));
   --text: var(--tg-text, #1a1d3a);
   --text-2: var(--tg-text-2, #4a4e78);
-  --text-muted: var(--tg-text-muted, #8890b8);
+  --text-muted: var(--tg-text-muted, #606aa0);
+  --brand-ink: var(--brand);
   --shadow-card: 0 2px 8px rgba(26, 29, 58, 0.06), 0 0 0 1px var(--border);
 }
 
@@ -403,7 +410,7 @@ a { color: var(--link); }
   transition: border-color 150ms, box-shadow 150ms;
 }
 .search-wrap:focus-within {
-  border-color: var(--brand);
+  border-color: var(--brand-ink);
   box-shadow: 0 0 0 4px rgba(91,108,248,0.12);
 }
 
@@ -506,7 +513,7 @@ a { color: var(--link); }
 .hint-chip {
   padding: 6px 12px; border-radius: var(--r-pill);
   background: var(--brand-soft);
-  color: var(--brand);
+  color: var(--brand-ink);
   font-size: 0.8rem; font-weight: 600;
   border: 1px solid rgba(91,108,248,0.18);
 }
@@ -567,7 +574,7 @@ a { color: var(--link); }
   padding: 3px 10px; border-radius: var(--r-pill);
   font-size: 0.78rem; font-weight: 600;
   background: var(--brand-soft);
-  color: var(--brand);
+  color: var(--brand-ink);
   border: 1px solid rgba(91,108,248,0.15);
 }
 
@@ -770,7 +777,7 @@ dialog.sheet-host::backdrop {
   transition: border-color 150ms, box-shadow 150ms;
 }
 .field-input:focus {
-  border-color: var(--brand);
+  border-color: var(--brand-ink);
   box-shadow: 0 0 0 4px rgba(91,108,248,0.12);
 }
 
@@ -799,8 +806,8 @@ dialog.sheet-host::backdrop {
   cursor: pointer;
   transition: border-color 150ms;
 }
-.check-row:hover { border-color: var(--brand); }
-.check-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--brand); cursor: pointer; flex-shrink: 0; }
+.check-row:hover { border-color: var(--brand-ink); }
+.check-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--brand-ink); cursor: pointer; flex-shrink: 0; }
 .check-label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .check-icon { font-size: 1rem; }
 
@@ -851,7 +858,7 @@ dialog.sheet-host::backdrop {
   transition: all 150ms ease; border: 1.5px solid var(--border);
 }
 
-.btn-action-edit   { background: rgba(91,108,248,0.08); color: var(--brand); border-color: rgba(91,108,248,0.2); }
+.btn-action-edit   { background: rgba(91,108,248,0.08); color: var(--brand-ink); border-color: rgba(91,108,248,0.2); }
 .btn-action-share  { background: rgba(16,185,129,0.08); color: #059669; border-color: rgba(16,185,129,0.2); }
 .btn-action-pin    { background: rgba(236,72,153,0.08); color: #be185d; border-color: rgba(236,72,153,0.2); }
 .btn-action-delete { background: rgba(239,68,68,0.08); color: var(--danger); border-color: rgba(239,68,68,0.2); }
@@ -883,7 +890,7 @@ dialog.sheet-host::backdrop {
 
 .countdown-ring-text {
   font-size: 0.92rem; font-weight: 700;
-  color: var(--brand); text-align: center;
+  color: var(--brand-ink); text-align: center;
 }
 
 /* Past event ring */
@@ -1214,7 +1221,7 @@ dialog.dp-dialog::backdrop {
 .ref-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .ref-chip {
   padding: 4px 12px; border-radius: var(--r-pill);
-  background: rgba(91, 108, 248, 0.1); color: var(--brand);
+  background: rgba(91, 108, 248, 0.1); color: var(--brand-ink);
   font-size: 0.76rem; font-weight: 700;
 }
 .ref-chip-muted { background: var(--border); color: var(--text-muted); }
@@ -1494,7 +1501,7 @@ dialog.ref-overlay::backdrop, dialog.invite-overlay::backdrop { background: tran
   color: var(--text-muted);
   font-family: inherit; font-size: 0.7rem; font-weight: 700;
 }
-.tab.is-active { color: var(--brand); }
+.tab.is-active { color: var(--brand-ink); }
 .tab:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 
 /* The list already reserved room for the floating add button; the bar sits
@@ -1814,7 +1821,7 @@ dialog.day-dialog::backdrop { background: rgba(10, 12, 30, 0.5); }
 .invite-tag {
   display: inline-block; padding: 4px 14px; margin-bottom: 14px;
   border-radius: var(--r-pill);
-  background: rgba(91, 108, 248, 0.12); color: var(--brand);
+  background: rgba(91, 108, 248, 0.12); color: var(--brand-ink);
   font-size: 0.72rem; font-weight: 800;
 }
 .invite-who { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
@@ -1844,7 +1851,7 @@ dialog.day-dialog::backdrop { background: rgba(10, 12, 30, 0.5); }
 .shr-actions #shrCopy {
   border-color: transparent;
   background: rgba(91, 108, 248, 0.12);
-  color: var(--brand);
+  color: var(--brand-ink);
   font-weight: 800;
 }
 .shr-actions #shrCopy:active { background: rgba(91, 108, 248, 0.2); }
@@ -1883,7 +1890,7 @@ dialog.day-dialog::backdrop { background: rgba(10, 12, 30, 0.5); }
   font-family: inherit; font-size: 0.8rem; font-weight: 800;
   cursor: pointer;
 }
-.pane-tab.is-active { background: rgba(91, 108, 248, 0.14); color: var(--brand); }
+.pane-tab.is-active { background: rgba(91, 108, 248, 0.14); color: var(--brand-ink); }
 .pane-count {
   padding: 1px 7px;
   border-radius: var(--r-pill);
@@ -1911,7 +1918,7 @@ dialog.day-dialog::backdrop { background: rgba(10, 12, 30, 0.5); }
   background: none; color: #fff;
   cursor: pointer;
 }
-.check-row.is-done .check-box { background: var(--brand); border-color: var(--brand); }
+.check-row.is-done .check-box { background: var(--brand); border-color: var(--brand-ink); }
 .check-text { flex: 1; min-width: 0; font-size: 0.88rem; word-break: break-word; }
 .check-row.is-done .check-text { color: var(--text-muted); text-decoration: line-through; }
 .check-remove {

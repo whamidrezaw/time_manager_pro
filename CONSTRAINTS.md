@@ -62,6 +62,9 @@ with no colour changed.
 - **D4 — Telegram themes:** the app corrects a hint or subtitle colour that
   falls below 4.5:1 against the theme background, instead of passing it
   through. The user's theme is not the app's to choose, but readable text is.
+  How, since Batch 20: a text colour from the theme that reads below
+  4.5:1 keeps its hue and moves towards black, or white on a dark theme, only
+  until it passes; it is never swapped for a fixed grey.
 
 - **D5 — dialogs:** every modal is a native `<dialog>` opened through
   `static/modal.js`: one stack, so Escape and Telegram's back button close only
@@ -86,6 +89,15 @@ with no colour changed.
 - **D10 — validation errors:** shown under their field, visible, and only while
   the field is invalid; they replace the toast for these three checks, so a
   screen reader does not hear the same error twice.
+
+- **D11 — colours (option 1):** a colour that fails keeps its hue and moves
+  only as far as 4.6:1 on every background it sits on, measured by axe in the
+  real screens, not only on paper. The brand has two roles: `--brand` is a
+  fill with white text on it in every theme, `--brand-ink` is the brand as
+  text, lighter in dark themes.
+- **D12 — the year strip (Y1):** its day buttons stay as they look and click,
+  but out of the Tab order; it sits inside `aria-hidden`, and the month grid
+  is the keyboard way to the same day.
 
 ## Exceptions
 

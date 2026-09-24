@@ -162,9 +162,11 @@
     var todayIso = isoOf(new Date());
     var cells = "";
     var walk = new Date(bounds.start);
+    // Y1 (Batch 20): a pointer shortcut, out of the Tab order. It sits inside
+    // aria-hidden, and the month grid is the keyboard way to the same day.
     for (var i = 0; i < bounds.days; i++) {
       var key = isoOf(walk);
-      cells += '<button type="button" class="px lv' + Math.min(counts[key] || 0, 4)
+      cells += '<button type="button" tabindex="-1" class="px lv' + Math.min(counts[key] || 0, 4)
         + (key === todayIso ? " is-today" : "") + '" data-iso="' + key
         + '" aria-label="' + key + '"></button>';
       walk.setDate(walk.getDate() + 1);

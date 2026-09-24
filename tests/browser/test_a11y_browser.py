@@ -287,17 +287,20 @@ def test_the_other_required_fields_report_their_error_the_same_way(open_app, fie
 
 # ── External opinion: axe-core ───────────────────────────────────────────────
 
-@pytest.mark.parametrize("state", ["list-light", "list-dark", "composer", "detail", "month"])
+@pytest.mark.parametrize(
+    "state",
+    ["list-light", "list-dark", "composer", "detail", "month", "composer-dark", "detail-dark", "month-dark"],
+)
 def test_axe_finds_no_serious_or_critical_violations(open_app, axe, state):
     """A11Y-05. Measured in the review: muted text 2.8-3.1:1, brand text 4.24:1,
     dark muted text 2.74:1, and a focusable year strip inside aria-hidden.
     """
-    page = open_app(scheme="dark" if state == "list-dark" else "light")
-    if state == "composer":
+    page = open_app(scheme="dark" if state.endswith("-dark") else "light")
+    if state.startswith("composer"):
         page.click("#openComposerBtn")
-    elif state == "detail":
+    elif state.startswith("detail"):
         page.click(".event-card >> nth=0")
-    elif state == "month":
+    elif state.startswith("month"):
         page.click("[data-view=month]")
         page.wait_for_selector(".cal-day")
     page.wait_for_timeout(300)
@@ -306,19 +309,31 @@ def test_axe_finds_no_serious_or_critical_violations(open_app, axe, state):
     assert not violations, describe_violations(violations)
 
 
-def test_muted_text_stays_readable_under_a_low_contrast_telegram_theme(open_app, axe):
+STRESS_THEMES = {
+    "light": {
+        "bg_color": "#ffffff", "secondary_bg_color": "#ffffff", "section_bg_color": "#ffffff",
+        "text_color": "#000000", "subtitle_text_color": "#999999", "hint_color": "#999999",
+        "link_color": "#2481cc",
+    },
+    # Batch 20: the same guard has to work the other way round, lightening a
+    # hint that is too dark for a dark theme.
+    "dark": {
+        "bg_color": "#212121", "secondary_bg_color": "#181818", "section_bg_color": "#212121",
+        "text_color": "#ffffff", "subtitle_text_color": "#5e5e5e", "hint_color": "#5e5e5e",
+        "link_color": "#1c5a8f",
+    },
+}
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_muted_text_stays_readable_under_a_low_contrast_telegram_theme(open_app, axe, scheme):
     """A11Y-05 / decision D4. A synthetic stress theme, not a real client.
 
     Telegram hands the app its hint colour; #999999 on white is 2.85:1. The app
     cannot choose the user's theme, so it has to correct a colour that fails
     rather than pass it through.
     """
-    stress_theme = {
-        "bg_color": "#ffffff", "secondary_bg_color": "#ffffff", "section_bg_color": "#ffffff",
-        "text_color": "#000000", "subtitle_text_color": "#999999", "hint_color": "#999999",
-        "link_color": "#2481cc",
-    }
-    page = open_app(theme=stress_theme)
+    page = open_app(scheme=scheme, theme=STRESS_THEMES[scheme])
 
     violations = [v for v in axe(page) if v["id"] == "color-contrast"]
     assert not violations, describe_violations(violations)
@@ -388,6 +403,22 @@ def test_the_calendar_switch_says_which_calendar_is_shown(open_app):
     gregorian = page.locator(".dp-tab[data-calendar=gregorian]")
     expect(jalali).to_have_attribute("aria-pressed", "true", timeout=FAST)
     expect(gregorian).to_have_attribute("aria-pressed", "false")
+
+
+def test_the_year_strip_is_not_a_trap_for_the_keyboard(open_app):
+    """A11Y-05 / 2.1.1, decided in Batch 20 (Y1). The strip is a button per day
+    of the year inside aria-hidden: 365 Tab stops a screen reader never names.
+    It keeps its look and its click; the month grid, named day by day since
+    A11Y-03, is the keyboard way to the same day."""
+    page = open_app()
+    page.click("[data-view=month]")
+    page.wait_for_selector("#yearStrip .px")
+    in_tab_order = page.evaluate(
+        "() => [...document.querySelectorAll('#yearStrip .px')].filter((e) => e.tabIndex >= 0).length")
+
+    assert in_tab_order == 0, f"{in_tab_order} year-strip days are Tab stops"
+    page.click("#yearStrip .px.is-today")
+    expect(page.locator("#dayClose")).to_be_visible(timeout=FAST)
 
 
 # ── Clean console under the production CSP ───────────────────────────────────
