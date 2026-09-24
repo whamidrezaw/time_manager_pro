@@ -274,11 +274,20 @@ def test_card_render_is_fast_enough_to_serve():
     }
     render_event_card(event, "en")  # warm up
 
-    start = time.perf_counter()
-    render_event_card(event, "en")
-    elapsed_ms = (time.perf_counter() - start) * 1000
+    # The question is what a render costs in CPU, so that is what is measured:
+    # this thread's CPU time, not the wall clock, which on a busy machine
+    # (Chromium and the live server run in the same suite) measured everything
+    # else too: 114 ms on a loaded Windows run for a render that costs ~55.
+    # Fastest of five, as the timeit documentation advises. The bar stays 80.
+    runs = []
+    for _ in range(5):
+        start = time.thread_time()
+        render_event_card(event, "en")
+        runs.append((time.thread_time() - start) * 1000)
+    elapsed_ms = min(runs)
 
-    assert elapsed_ms < 80, f"render took {elapsed_ms:.0f}ms"
+    assert elapsed_ms < 80, (
+        f"render took {elapsed_ms:.0f}ms of CPU at best (runs: {[round(r) for r in runs]})")
 
 
 async def test_card_endpoint_yields_to_the_event_loop():
