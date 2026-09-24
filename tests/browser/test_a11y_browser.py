@@ -189,6 +189,54 @@ def test_event_titles_are_not_flattened_inside_a_button(open_app):
     assert flattened.count() == 0, f"{flattened.count()} event title(s) sit inside a button"
 
 
+def ax_node(page, selector: str) -> dict:
+    """Role, name and description of the first match, as Chromium hands them to
+    a screen reader (not as the markup spells them)."""
+    cdp = page.context.new_cdp_session(page)
+    document = cdp.send("DOM.getDocument", {"depth": 0})
+    node = cdp.send("DOM.querySelector", {"nodeId": document["root"]["nodeId"], "selector": selector})
+    tree = cdp.send("Accessibility.getPartialAXTree", {"nodeId": node["nodeId"], "fetchRelatives": False})
+    ax = tree["nodes"][0]
+    return {key: (ax.get(key) or {}).get("value", "") for key in ("role", "name", "description")}
+
+
+def test_an_event_card_is_announced_with_its_countdown_and_date(open_app):
+    """A11Y-04, decided in Batch 20 (option D, measured at 0 pixels changed): the
+    card stays one button, named by its title and described by its own badges,
+    dates and status.
+
+    Chromium does keep the h3 and the dates of a role="button" in its tree, but
+    a phone screen reader usually reads a button as one stop by its name, and
+    that name was "Open details for ...". The description is what carries the
+    countdown and the date to every screen reader alike.
+    """
+    page = open_app()
+    card = page.locator(".event-card >> nth=0")
+    iso = card.locator("[data-f=iso]").text_content()
+    countdown = card.locator("[data-f=urgency]").text_content()
+    node = ax_node(page, ".event-card")
+
+    assert node["role"] == "button" and node["name"] == "Mom's birthday", node
+    assert iso in node["description"] and countdown in node["description"], node
+
+
+def test_filtering_and_searching_announce_how_many_events_are_shown(open_app):
+    """A11Y-04, decided in Batch 20: the list is no live region any more, so a
+    short status of its own says how many events a filter or a search leaves.
+    Loading the list, or reloading it after a save, stays quiet."""
+    page = open_app()
+    status = page.locator("#listStatus")
+    expect(status).to_have_attribute("role", "status")
+    expect(status).to_have_text("")
+
+    page.click("[data-filter=birthday]")
+    expect(status).to_have_text("1 event", timeout=FAST)
+    page.click("[data-filter=all]")
+    expect(status).to_have_text("3 events", timeout=FAST)
+    page.fill("#searchInput", "zzz")
+    expect(status).to_have_text("No events found", timeout=3000)
+
+
 def test_a_missing_title_is_reported_on_the_field_itself(open_app):
     """A11Y-06 / 3.3.1. The only error is a toast that disappears after 2.8 s."""
     page, _ = open_dialog(open_app, "composer")

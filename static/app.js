@@ -84,6 +84,7 @@
     searchInput:        $("searchInput"),
     filterButtons:      $$("[data-filter]"),
     eventsWrap:         $("eventsWrap"),
+    listStatus:         $("listStatus"),
     listState:          $("listState"),
     listErrorState:     $("listErrorState"),
     noResultsState:     $("noResultsState"),
@@ -198,6 +199,9 @@
       "Category filter": "فیلتر دسته",
       "Search events…": "جست‌وجوی رویداد…",
       "Search events": "جست‌وجوی رویداد",
+      "No events found": "رویدادی پیدا نشد",
+      "1 event": "۱ رویداد",
+      "{count} events": "{count} رویداد",
       "Note and checklist": "یادداشت و چک‌لیست",
       "Event list": "فهرست رویدادها",
       "🌐 All": "🌐 همه",
@@ -638,6 +642,23 @@
   // the list still feels like it reacts as you type.
   const SEARCH_DEBOUNCE_MS = 350;
 
+  // Set only by a filter or a search, so loading or reloading the list after a
+  // save stays quiet; the next finished load then says what it left.
+  let announceCountNext = false;
+
+  function announceCount() {
+    if (!els.listStatus) return;
+    const n = state.filteredEvents.length;
+    const fa = document.documentElement.lang === "fa";
+    const count = (fa ? String(n).replace(/[0-9]/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]) : String(n)) + (state.hasMore ? "+" : "");
+    const text = n === 0 ? t("No events found")
+      : n === 1 && !state.hasMore ? t("1 event")
+      : t("{count} events", { count });
+    // Emptied first, so the same text twice in a row is still announced.
+    els.listStatus.textContent = "";
+    requestAnimationFrame(() => { els.listStatus.textContent = text; });
+  }
+
   async function loadEvents(append = false) {
     if (!append) {
       state.skip = 0;
@@ -673,6 +694,10 @@
       renderEvents();
       updateCounters();
       showStatePanel();
+      if (!append && announceCountNext) {
+        announceCountNext = false;
+        announceCount();
+      }
 
       if (els.loadMoreWrap) els.loadMoreWrap.hidden = !state.hasMore;
     } catch (error) {
@@ -1021,9 +1046,10 @@
     let node = headerIndex.get(key);
     if (node) return node;
 
-    node = document.createElement("div");
+    // A real heading: Pinned, Today, Tomorrow and Later are how the list is
+    // organised, and a screen reader can now jump between them.
+    node = document.createElement("h2");
     node.className = `event-section section-${key}`;
-    node.setAttribute("role", "presentation");
     node.innerHTML = '<span class="event-section-label"></span>';
     node.firstChild.textContent = t(SECTION_LABELS[key] || key);
     headerIndex.set(key, node);
@@ -1046,11 +1072,16 @@
     art.tabIndex = 0;
     art.setAttribute("role", "button");
     art.dataset.id = id;
+    // One button per card (option D, Batch 20): named by its title, described
+    // by its own badges, dates and status, so every screen reader gets the
+    // countdown too. A heading inside a button would be flattened into it.
+    art.setAttribute("aria-labelledby", `evt-${id}-t`);
+    art.setAttribute("aria-describedby", `evt-${id}-i evt-${id}-d evt-${id}-s`);
     art.innerHTML = `
       <div class="event-card-top">
         <div class="event-head">
-          <h3 class="event-title" data-f="title"></h3>
-          <div class="event-badges">
+          <span class="event-title" data-f="title" id="evt-${id}-t"></span>
+          <div class="event-badges" id="evt-${id}-i">
             <span class="badge badge-pin" data-f="pin" hidden>${CARD_ICONS.pin}<span data-f="pinText"></span></span>
             <span class="badge" data-f="cat"></span>
             <span class="urgency-badge" data-f="urgency"></span>
@@ -1066,14 +1097,14 @@
         <span class="event-progress-label" data-f="progress"></span>
       </div>
 
-      <div class="event-dates">
+      <div class="event-dates" id="evt-${id}-d">
         <span class="event-date-item">${CARD_ICONS.calendar}<span data-f="iso"></span></span>
         <span class="event-dates-sep">•</span>
         <span class="event-date-item">${CARD_ICONS.moon}<span data-f="jalali"></span></span>
         <span class="event-date-item event-reminder" data-f="reminderWrap" hidden>${CARD_ICONS.bell}<span data-f="reminder"></span></span>
       </div>
 
-      <div class="event-bottom">
+      <div class="event-bottom" id="evt-${id}-s">
         <span class="status-dot" data-f="dot"></span>
         <span data-f="status"></span>
       </div>
@@ -1115,7 +1146,6 @@
     const catLabel = CATEGORY_LABELS[event.category] || "🌐 General";
 
     art.className = `event-card cat-${event.category || "general"} tone-${cd.tone}`;
-    art.setAttribute("aria-label", t("Open details for {title}", { title: event.title }));
 
     f.title.textContent = event.title || "";
     f.pin.hidden = !event.pinned;
@@ -1875,6 +1905,7 @@
       if (value.trim() === state.searchTerm.trim()) return;
 
       state.searchTerm = value;
+      announceCountNext = true;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => loadEvents(), SEARCH_DEBOUNCE_MS);
     });
@@ -1890,6 +1921,7 @@
         if (next === state.currentFilter) return;
 
         state.currentFilter = next;
+        announceCountNext = true;
         clearTimeout(searchTimer);
         loadEvents();
       });

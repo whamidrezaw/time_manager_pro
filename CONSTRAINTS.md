@@ -68,6 +68,13 @@ with no colour changed.
   closes rather than when a message is written. Measured in Chromium: outside
   an open modal dialog the region is dropped from the accessibility tree.
 
+- **D8 — event cards:** each card stays one button, named by its title and
+  described by its own badges, dates and status. The alternative, a heading
+  with a button stretched inside it, changed the keyboard focus ring (5,527
+  pixels measured); this one changed nothing.
+- **D9 — list status:** filters and searches announce how many events they
+  leave, in a short status of its own; loading and reloading stay quiet.
+
 ## Exceptions
 
 | ID | Rule | Path | Reason | Owner | Expires |

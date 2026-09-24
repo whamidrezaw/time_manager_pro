@@ -146,7 +146,10 @@
     </section>
 
     <!-- Events List -->
-    <section id="eventsWrap" class="events-wrap" aria-live="polite" aria-label="Event list"></section>
+    <section id="eventsWrap" class="events-wrap" aria-label="Event list"></section>
+      <!-- Not the list itself: re-announcing every card on each render drowned the
+           reader. Filters and searches say how many events they leave, here. -->
+      <p id="listStatus" class="sr-only" role="status"></p>
 
     <!-- Load More -->
     <div id="loadMoreWrap" class="load-more-wrap" hidden>

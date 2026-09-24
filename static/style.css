@@ -550,6 +550,7 @@ a { color: var(--link); }
 .event-head { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
 
 .event-title {
+  display: block;   /* a span since Batch 20; it keeps the h3's block layout */
   margin: 0; font-size: 1rem; font-weight: 700;
   line-height: 1.35; color: var(--text);
 }
