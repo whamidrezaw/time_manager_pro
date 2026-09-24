@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import itertools
 import json
 import os
@@ -34,6 +35,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import pytest
+import telegram
 import uvicorn
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
@@ -113,6 +115,44 @@ async def _inviter_name(user_id, settings=None) -> str:
     return "Ava"
 
 
+# Every module of the web app that talks to Telegram. The live server runs with
+# a stand-in in each; test_harness.py keeps this list complete.
+TELEGRAM_MODULES = (
+    "app.main",
+    "app.routes.events",
+    "app.routes.tasks",
+    "app.routes.telegram",
+    "app.services.health",
+    "app.services.referrals",
+)
+
+
+class FakeTelegramBot:
+    """Stands in for telegram.Bot while the live server runs: no test reaches
+    the network. Batch 20 found saving an event waiting on api.telegram.org
+    with the test token, so a test was as fast as the network happened to be.
+    Messages land in `sent` instead of a chat; any other call does nothing."""
+
+    sent: list[dict] = []
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def send_message(self, **kwargs):
+        FakeTelegramBot.sent.append(kwargs)
+
+    def __getattr__(self, name):
+        async def call(*args, **kwargs):
+            return None
+        return call
+
+
 @pytest.fixture(scope="module")
 def live_server():
     import app.routes.sharegroup as sharegroup
@@ -120,10 +160,24 @@ def live_server():
     install_fake_db()
     real_name_lookup = sharegroup.get_first_name
     sharegroup.get_first_name = _inviter_name
+    # Two ways in: modules that imported Bot at the top hold their own name for
+    # it, and imports inside a function (health, referrals) read the package's
+    # at call time. Both are stood in for, and both are put back.
+    real_package_bot = telegram.Bot
+    telegram.Bot = FakeTelegramBot
+    real_bots = {}
+    for name in TELEGRAM_MODULES:
+        module = importlib.import_module(name)
+        if hasattr(module, "Bot"):
+            real_bots[name] = module.Bot
+            module.Bot = FakeTelegramBot
     server = LiveServer()
     server.start()
     yield server
     server.stop()
+    for name, bot in real_bots.items():
+        importlib.import_module(name).Bot = bot
+    telegram.Bot = real_package_bot
     sharegroup.get_first_name = real_name_lookup
     teardown_fake_db()
 

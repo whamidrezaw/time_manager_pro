@@ -63,6 +63,12 @@ validation errors shown while the composer is open would never be announced.
 
 ## Found along the way (not fixed yet)
 
+- **Saving an event waits for Telegram.** `/api/add` sends its confirmation
+  message (`getMe`, then `sendMessage`) before it answers, so a slow or
+  unreachable Telegram holds the composer open, up to the client's timeouts.
+  Found through a flaky test in Batch 20; the decision on sending the message
+  after the answer is pending.
+
 - **A correction to the first review.** It said the heading and the dates
   inside a card's `role="button"` were never read. Measured in Batch 20:
   Chromium keeps them in its accessibility tree. Phone screen readers usually

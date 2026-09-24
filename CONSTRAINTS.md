@@ -13,6 +13,13 @@ file is not weakened in the same commit as a change that was failing it.
 - No threshold below is lowered in the same change that was failing it.
 - No new ruff exclusions or `# noqa` for test files.
 - Tightening this file is quiet. Loosening it is a reviewed change of its own.
+- Tests do not reach the network. The browser harness stands in for Telegram
+  in every module that talks to it, and `tests/browser/test_harness.py` fails
+  when a new one is missing. (Batch 20: saving an event waited on
+  api.telegram.org, so a test was only as fast as the network.)
+- A test about cost measures the work, not the machine: the CPU time of the
+  thread that does it, fastest of a few runs, never the wall clock of a machine
+  that is running Chromium and a server alongside. The bar itself stays.
 
 - **Known failures.** A batch may carry failing tests on purpose, but only
   the ones in `tests/known_failures.txt`. On `fix/**` branches CI runs
