@@ -106,6 +106,20 @@ def test_every_form_field_has_a_label_a_screen_reader_can_read():
     assert not unlabeled, f"fields without a readable label: {unlabeled}"
 
 
+def test_the_date_fields_say_they_open_a_dialog():
+    """A11Y-08 / 4.1.2. A readonly field that opens a picker should say so.
+
+    aria-haspopup="dialog" is what tells a screen reader that Enter on the
+    field opens something, rather than leaving a read-only text box that seems
+    to do nothing.
+    """
+    nodes = parse(INDEX.read_text(encoding="utf-8"))
+    pickers = [node for node in nodes if "field-picker" in (node.attrs.get("class") or "").split()]
+    missing = [node.attrs.get("id") for node in pickers if node.attrs.get("aria-haspopup") != "dialog"]
+
+    assert pickers and not missing, f"picker fields without aria-haspopup=dialog: {missing}"
+
+
 def test_the_event_list_is_not_one_big_live_region():
     """A11Y-04 / 4.1.3. aria-live on #eventsWrap re-announces the whole list on every render.
 

@@ -21,6 +21,13 @@ pytestmark = pytest.mark.browser
 FAST = 1500  # ms. Every expectation below is met within a frame or two, or not at all.
 
 
+def focused(page) -> str:
+    return page.evaluate("""() => { const a = document.activeElement;
+        if (!a) return 'nothing';
+        const cls = a.className ? '.' + String(a.className).split(' ')[0] : '';
+        return a.id ? '#' + a.id : a.tagName.toLowerCase() + cls; }""")
+
+
 def activate_row_delete(page, title: str) -> None:
     """Presses a row's Delete exactly as the end of a swipe-and-tap does."""
     page.evaluate("""(title) => [...document.querySelectorAll('.event-row .row-action-delete')]
@@ -68,17 +75,53 @@ def open_dialog(open_app, name: str):
 # ── Keyboard access ──────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("key", ["Enter", "Space"])
-def test_the_date_field_opens_the_picker_from_the_keyboard(open_app, key):
-    """A11Y-08 / 2.1.1. #date is readonly and only a click opens the picker.
+@pytest.mark.parametrize("field", ["date", "date-jalali", "repeatUntil"])
+def test_the_date_field_opens_the_picker_from_the_keyboard(open_app, field, key):
+    """A11Y-08 / 2.1.1. The date fields are readonly and only a click opened the picker.
 
     Without it a keyboard-only user cannot give an event a date, which means
-    they cannot create an event at all.
+    they cannot create an event at all. Repeat-until is the third such field.
     """
     page, _ = open_dialog(open_app, "composer")
-    page.focus("#date")
+    if field == "repeatUntil":
+        page.select_option("#repeat", "daily")
+        expect(page.locator("#repeatUntil")).to_be_visible()
+    page.focus(f"#{field}")
     page.keyboard.press(key)
 
     expect(page.locator("#dpOverlay")).to_be_visible(timeout=FAST)
+
+
+def tab_to(page, selector: str, limit: int = 40) -> None:
+    """Presses Tab, and only Tab, until the element has focus."""
+    for _ in range(limit):
+        if page.evaluate("(s) => document.activeElement === document.querySelector(s)", selector):
+            return
+        page.keyboard.press("Tab")
+    raise AssertionError(f"{selector} was never reached with Tab; focus is on {focused(page)}")
+
+
+def test_a_keyboard_only_user_can_date_and_save_an_event(open_app):
+    """A11Y-08's reason to exist, end to end and with the keyboard alone: open
+    the composer, type a title, give it a date in the picker, save."""
+    page = open_app()
+    tab_to(page, "#openComposerBtn")
+    page.keyboard.press("Enter")
+    expect(page.locator("#composerSheet")).to_be_visible()
+    tab_to(page, "#title")
+    page.keyboard.type("Physio session")
+    tab_to(page, "#date")
+    page.keyboard.press("Enter")
+    expect(page.locator("#dpOverlay")).to_be_visible(timeout=FAST)
+    tab_to(page, "#dpConfirm")
+    page.keyboard.press("Enter")
+    expect(page.locator("#dpOverlay")).to_be_hidden(timeout=FAST)
+    expect(page.locator("#date")).not_to_have_value("")
+    tab_to(page, "#saveEventBtn")
+    page.keyboard.press("Enter")
+
+    expect(page.locator("#composerSheet")).to_be_hidden(timeout=5000)
+    expect(page.locator(".event-title", has_text="Physio session")).to_have_count(1, timeout=5000)
 
 
 def test_the_skip_link_becomes_visible_when_focused(open_app):

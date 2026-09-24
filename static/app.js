@@ -2178,13 +2178,31 @@
       onPick: setEventDate,
     });
 
-    els.date?.addEventListener("click", openForEventDate("gregorian"));
-    els.dateJalali?.addEventListener("click", openForEventDate("jalali"));
-    els.repeatUntil?.addEventListener("click", () => openDatePicker({
+    const openRepeatUntil = () => openDatePicker({
       value: els.repeatUntil.value,
       allowClear: true,
       onPick: (iso) => { els.repeatUntil.value = iso; },
-    }));
+    });
+
+    // The date fields are readonly and open the picker, so they must open it
+    // from the keyboard too, or a keyboard-only user cannot date an event and
+    // so cannot create one. They behave like buttons: Enter acts on keydown
+    // (and must not submit the form), Space on keyup, so the keyup cannot land
+    // on whatever the picker puts focus on first.
+    [
+      [els.date, openForEventDate("gregorian")],
+      [els.dateJalali, openForEventDate("jalali")],
+      [els.repeatUntil, openRepeatUntil],
+    ].forEach(([field, open]) => {
+      field?.addEventListener("click", open);
+      field?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); open(); }
+        else if (e.key === " ") e.preventDefault();
+      });
+      field?.addEventListener("keyup", (e) => {
+        if (e.key === " ") open();
+      });
+    });
 
     [[els.dpYear, "y"], [els.dpMonth, "m"], [els.dpDay, "d"]].forEach(([el, field]) => {
       el?.addEventListener("scroll", () => dpOnScroll(el, field), { passive: true });

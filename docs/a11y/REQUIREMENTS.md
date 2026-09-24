@@ -14,7 +14,7 @@ scratch copy, so none of them is a test that cannot pass.
 | A11Y-05 | Text meets 4.5:1 in the fallback light and dark palettes. axe-core reports zero serious or critical violations on five states. A Telegram theme with a weak hint colour is corrected (D4). | 1.4.3, 1.4.11, 4.1.2 | `test_the_fallback_palette_meets_wcag_aa_text_contrast`, `test_axe_finds_no_serious_or_critical_violations`, `test_muted_text_stays_readable_under_a_low_contrast_telegram_theme` |
 | A11Y-06 | A validation error is marked on its field (`aria-invalid`) and connected to a message (`aria-describedby`) that does not disappear. | 3.3.1 | `test_a_missing_title_is_reported_on_the_field_itself` |
 | A11Y-07 | The public countdown page gives the countdown as text (in the image alt), and has a `main` landmark and an `h1`. | 1.1.1, 1.3.1 | `test_the_countdown_image_alt_text_carries_the_countdown`, `test_the_countdown_page_has_a_main_landmark_and_a_heading` |
-| A11Y-08 | The date fields open the picker from the keyboard. | 2.1.1 | `test_the_date_field_opens_the_picker_from_the_keyboard[Enter/Space]` |
+| A11Y-08 | The three date fields (the event date in both calendars, and repeat-until) open the picker from the keyboard — Enter, and Space the way a button takes it — and say that they open a dialog. A keyboard-only user can date and save an event. | 2.1.1, 4.1.2 | `test_the_date_field_opens_the_picker_from_the_keyboard`, `test_a_keyboard_only_user_can_date_and_save_an_event`, `test_the_date_fields_say_they_open_a_dialog` |
 | A11Y-09 | No CSP violation in the console, inside Telegram (every browser test checks this at teardown) or outside it. | security, clean console | `test_opening_the_app_outside_telegram_raises_no_csp_violation` |
 
 ## Already met: keep it that way
@@ -48,11 +48,11 @@ validation errors shown while the composer is open would never be announced.
 
 ## What the reverse proof taught the real fixes
 
-- **Date fields.** Act on Enter at keydown and call `stopPropagation`: the
-  picker registers a document-level Enter listener during the same dispatch,
-  and that listener confirms the picker at once. Act on Space at keyup, the
-  way native buttons do. Do not autofocus Confirm on open: a 40 ms timer can
-  hand the Space keyup to it. Run the Space test ten times before committing.
+- **Date fields.** Space acts at keyup, the way native buttons do. The other
+  two traps seen in Step 0's sketch are gone since step 2a: the picker opens
+  through TMModal with no Enter listener of its own that could fire in the
+  same dispatch, and it starts at its title, not at Confirm. The keyboard
+  tests ran ten times in a row before the A11Y-08 commit.
 - **Day sheet.** Escape must work before focus has arrived, so use a
   document-level handler rather than one on the sheet.
 - **Tabs to toggles.** Converting tabs to toggles also means removing
