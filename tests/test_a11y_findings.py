@@ -197,28 +197,36 @@ def test_the_fallback_palette_meets_wcag_aa_text_contrast():
     Measured by axe in the review and reproduced here without a browser, so the
     edit loop catches a regression in milliseconds: muted text 3.12:1 on white,
     2.8:1 on the page background; brand text 4.24:1; dark muted text 2.74:1.
+
+    Since Batch 20 the brand has two roles: --brand is a fill with white text
+    on it, in every theme, and --brand-ink is the brand as text, which dark
+    themes lighten. The Telegram-light case includes the dark media query
+    underneath it, as on a phone in dark mode.
     """
     css = STYLESHEET.read_text(encoding="utf-8")
     base = _block(css, r"^:root\s*\{(.*?)^\}")
+    media_dark = _block(css, r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{(.*?)\}")
+    tg_dark = _block(css, r'^:root\[data-tg-scheme="dark"\]\s*\{(.*?)^\}')
+    tg_light = _block(css, r'^:root\[data-tg-scheme="light"\]\s*\{(.*?)^\}')
     themes = {
         "light": base,
-        "light [data-tg-scheme]": {**base, **_block(css, r'^:root\[data-tg-scheme="light"\]\s*\{(.*?)^\}')},
-        "dark (media query)": {
-            **base, **_block(css, r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{(.*?)\}"),
-        },
-        "dark [data-tg-scheme]": {**base, **_block(css, r'^:root\[data-tg-scheme="dark"\]\s*\{(.*?)^\}')},
+        "light [data-tg-scheme] on a dark phone": {**base, **media_dark, **tg_light},
+        "dark (media query)": {**base, **media_dark},
+        "dark [data-tg-scheme]": {**base, **tg_dark},
     }
     pairs = [
         ("text-muted", "surface", "labels and subtitles on cards and sheets"),
         ("text-muted", "bg", "the header subtitle"),
-        ("brand", "surface", "the active tab and accent text"),
+        ("brand-ink", "surface", "the active tab and accent text"),
+        ("brand-text", "brand", "text on primary buttons and today"),
     ]
 
     failures = []
     for theme, tokens in themes.items():
-        checks = pairs + ([("brand-text", "brand", "text on primary buttons and today")]
-                          if theme.startswith("light") else [])
-        for foreground, background, where in checks:
+        for foreground, background, where in pairs:
+            if foreground not in tokens:
+                failures.append(f"{theme}: no --{foreground} ({where})")
+                continue
             ratio = contrast_ratio(_hex(tokens, foreground), _hex(tokens, background))
             if ratio < 4.5:
                 failures.append(f"{theme}: --{foreground} on --{background} = {ratio:.2f}:1 ({where})")
