@@ -127,15 +127,16 @@
   function buildSheet() {
     if (els.overlay) return;
 
-    var overlay = document.createElement("div");
+    // A native <dialog> on the TMModal stack (static/modal.js), shaped exactly
+    // like the overlay it replaces, so the look and tap-outside-to-close stay.
+    var overlay = document.createElement("dialog");
     overlay.className = "ref-overlay";
-    overlay.hidden = true;
-    overlay.setAttribute("aria-hidden", "true");
+    overlay.setAttribute("aria-labelledby", "refTitle");
     overlay.innerHTML =
-      '<div class="ref-dialog" role="dialog" aria-modal="true" aria-labelledby="refTitle">' +
+      '<div class="ref-dialog">' +
         '<div class="ref-handle" aria-hidden="true"></div>' +
         '<div class="ref-head">' +
-          '<h2 class="ref-title" id="refTitle">' + t("Invite friends") + "</h2>" +
+          '<h2 class="ref-title" id="refTitle" tabindex="-1" autofocus>' + t("Invite friends") + "</h2>" +
           '<button type="button" class="icon-btn ref-close" id="refCloseBtn" aria-label="' +
             t("Close") + '">✕</button>' +
         "</div>" +
@@ -246,21 +247,31 @@
     haptic();
     buildSheet();
     render();
-    els.overlay.hidden = false;
-    els.overlay.setAttribute("aria-hidden", "false");
+    window.TMModal.open(els.overlay, { requestClose: close, onClose: closed });
     requestAnimationFrame(function () {
       els.overlay.classList.add("is-open");
     });
     refresh();
   }
 
+  var closing = null;
+
+  // Animated: the sheet slides out before it leaves the top layer.
   function close() {
-    if (!els.overlay) return;
+    if (!els.overlay || !window.TMModal.isOpen(els.overlay) || closing) return;
     els.overlay.classList.remove("is-open");
-    els.overlay.setAttribute("aria-hidden", "true");
-    setTimeout(function () {
-      els.overlay.hidden = true;
-    }, 200);
+    closing = setTimeout(closeNow, 200);
+  }
+
+  function closeNow() {
+    clearTimeout(closing);
+    closing = null;
+    if (els.overlay) window.TMModal.close(els.overlay);
+  }
+
+  // However it was closed: its own button, Escape, or Telegram's back button.
+  function closed() {
+    els.overlay.classList.remove("is-open");
   }
 
   function flash(button, text) {

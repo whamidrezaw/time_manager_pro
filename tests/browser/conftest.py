@@ -40,6 +40,7 @@ from playwright.sync_api import sync_playwright
 
 from app.config import get_settings
 from app.services.auth import compute_telegram_hash
+from app.services.share_group import start_group
 from tests.harness import install_fake_db, seed_event, teardown_fake_db, utc
 
 TELEGRAM_SDK = "https://telegram.org/js/telegram-web-app.js"
@@ -107,13 +108,23 @@ class LiveServer:
         get_settings.cache_clear()
 
 
+async def _inviter_name(user_id, settings=None) -> str:
+    """Stands in for Telegram's getChat, the one outside call the join card makes."""
+    return "Ava"
+
+
 @pytest.fixture(scope="module")
 def live_server():
+    import app.routes.sharegroup as sharegroup
+
     install_fake_db()
+    real_name_lookup = sharegroup.get_first_name
+    sharegroup.get_first_name = _inviter_name
     server = LiveServer()
     server.start()
     yield server
     server.stop()
+    sharegroup.get_first_name = real_name_lookup
     teardown_fake_db()
 
 
@@ -142,12 +153,13 @@ def signed_init_data(user_id: int, lang: str) -> str:
     return urlencode(fields)
 
 
-def telegram_stub(user_id: int, lang: str, scheme: str, theme: dict | None) -> str:
+def telegram_stub(user_id: int, lang: str, scheme: str, theme: dict | None, start_param: str = "") -> str:
     """Only the surface static/*.js actually touches."""
     return f"""
 window.Telegram = {{ WebApp: {{
   initData: {json.dumps(signed_init_data(user_id, lang))},
-  initDataUnsafe: {{ user: {{ id: {user_id}, first_name: "Test", language_code: {json.dumps(lang)} }} }},
+  initDataUnsafe: {{ user: {{ id: {user_id}, first_name: "Test", language_code: {json.dumps(lang)} }},
+                    start_param: {json.dumps(start_param)} }},
   colorScheme: {json.dumps(scheme)},
   themeParams: {json.dumps(theme or {})},
   version: "8.0", platform: "tdesktop",
@@ -198,9 +210,18 @@ def open_app(browser, live_server):
     opened: list[tuple[object, bool]] = []
 
     def factory(*, lang="en", scheme="light", theme=None, width=390,
-                onboarding_seen=True, telegram=True):
+                onboarding_seen=True, telegram=True, invite=False):
         user_id = next(_users)
         seeded = [live_server.run(seed_event(user_id=str(user_id), **event)) for event in default_events()]
+        start_param = ""
+        if invite:
+            # Opened from a friend's ?startapp=s_<token> link to "Book club".
+            owner = str(next(_users))
+            shared = live_server.run(seed_event(
+                user_id=owner, title="Book club", category="general",
+                date_iso=(date.today() + timedelta(days=9)).isoformat(), event_ts_utc=utc(days=9),
+            ))
+            start_param = "s_" + live_server.run(start_group(owner, shared["_id"]))["token"]
 
         context = browser.new_context(
             viewport={"width": width, "height": 844}, color_scheme=scheme, reduced_motion="reduce",
@@ -224,7 +245,7 @@ def open_app(browser, live_server):
         page.on("console", lambda msg: msg.type == "error" and page.console_errors.append(msg.text))
         page.on("pageerror", lambda error: page.page_errors.append(str(error)))
 
-        sdk = telegram_stub(user_id, lang, scheme, theme) if telegram else ""
+        sdk = telegram_stub(user_id, lang, scheme, theme, start_param) if telegram else ""
         page.route(TELEGRAM_SDK, lambda route: route.fulfill(
             status=200, content_type="application/javascript", body=sdk))
 

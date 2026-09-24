@@ -7,7 +7,7 @@ scratch copy, so none of them is a test that cannot pass.
 
 | ID | Requirement | WCAG | Proven by |
 |----|-------------|------|-----------|
-| A11Y-01 | Every dialog starts at its title (the confirm at Cancel), keeps Tab inside, closes on Escape, closes alone when two are stacked (Escape or Telegram's back button), and gives focus back to what opened it — or, after a delete removed the opener, to the next event. Nine dialogs: composer, detail page, date picker, confirm, onboarding, day sheet, share, referral and invite. | 2.1.2, 2.4.3 | `tests/browser/test_a11y_dialogs.py` |
+| A11Y-01 | Every dialog starts at its title (the confirm at Cancel), keeps Tab inside, closes on Escape, closes alone when two are stacked (Escape or Telegram's back button), and gives focus back to what opened it — or, where that is gone or never existed, to the event concerned (the next one after a delete, the joined one after a join). Nine dialogs: composer, detail page, date picker, confirm, onboarding, day sheet, share, referral and invite. | 2.1.2, 2.4.3 | `tests/browser/test_a11y_dialogs.py` |
 | A11Y-02 | Every way of dismissing a confirmation settles it. One confirmation sends exactly one request. Delete and Pin on the detail page work. | 2.1.1, correctness | `test_a_cancelled_delete_is_not_replayed_by_the_next_confirmation`, `test_one_confirmation_sends_exactly_one_delete`, `test_the_detail_page_delete_button_asks_before_deleting`, `test_the_detail_page_pin_button_sends_the_change` |
 | A11Y-03 | Every control exposes name, role and state: fields have readable labels, filters expose `aria-pressed`, tabs control tab panels (or become toggles), calendar days are named with their date and today carries `aria-current="date"`, the skip link is visible on focus, and primary controls are at least 44×44 px. | 1.3.1, 2.4.7, 3.3.2, 4.1.2, 2.5.5 (AAA, D3) | `test_every_form_field_has_a_label_a_screen_reader_can_read`, `test_every_tab_controls_a_tab_panel`, `test_filter_buttons_expose_which_filter_is_active`, `test_calendar_days_are_named_with_their_date`, `test_the_skip_link_becomes_visible_when_focused`, `test_primary_controls_are_at_least_44_css_pixels` |
 | A11Y-04 | The list has structure: section labels are headings, event titles are not flattened inside a button, and the list is not one live region. | 1.3.1, 4.1.3 | `test_list_sections_are_headings`, `test_event_titles_are_not_flattened_inside_a_button`, `test_the_event_list_is_not_one_big_live_region` |
@@ -60,6 +60,21 @@ validation errors shown while the composer is open would never be announced.
 - **More contrast failures.** axe shows more nodes once the first are fixed.
   The Share action text (#059669 on #ecf9f5, 3.48:1) and the Delete action
   text (#ef4444 on #fef0f0, 3.39:1) also fail.
+
+## Found along the way (not fixed yet)
+
+- **Share card and the CSP.** The preview is loaded from `WEBAPP_BASE_URL`,
+  not from the origin serving the page. Today both are the same; if a custom
+  domain ever makes them differ, `img-src 'self'` refuses the preview. Use a
+  relative URL, or add that origin to `img-src`.
+- **Card images have `alt=""`.** In the share sheet and on the join card, the
+  title and countdown inside the image never reach a screen reader (A11Y-07).
+- **`alert()` after joining an event you already have.** The code notes that
+  `window.confirm` fails in the Telegram WebView; `alert` is at the same risk.
+  A message in the status region would do.
+- **No axe states for the smaller dialogs.** The axe checks cover the list,
+  the composer, the detail page and the month. Confirm, onboarding, picker,
+  day sheet, share, invite friends and the join card belong in A11Y-05.
 
 ## Still manual (not automatable)
 

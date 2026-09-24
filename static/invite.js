@@ -54,14 +54,25 @@
     return data;
   }
 
+  // Animated, then off the TMModal stack; resolves once the card is gone.
   function close(overlay) {
-    overlay.classList.remove("is-open");
-    setTimeout(function () { overlay.remove(); }, 200);
+    return new Promise(function (resolve) {
+      if (!window.TMModal.isOpen(overlay)) { resolve(); return; }
+      overlay.classList.remove("is-open");
+      setTimeout(function () {
+        window.TMModal.close(overlay);
+        resolve();
+      }, 200);
+    });
   }
 
   function show(invite, token) {
-    var overlay = document.createElement("div");
+    // A native <dialog> on the TMModal stack (static/modal.js), shaped like
+    // the overlay it replaces. Named by its title: it had role="dialog" and
+    // nothing for a screen reader to call it.
+    var overlay = document.createElement("dialog");
     overlay.className = "invite-overlay";
+    overlay.setAttribute("aria-labelledby", "inviteTitle");
     if (isFa) overlay.setAttribute("dir", "rtl");
 
     var who = invite.from_name
@@ -69,13 +80,13 @@
       : t("Someone wants to share this event with you");
 
     overlay.innerHTML =
-      '<div class="invite-card" role="dialog" aria-modal="true">' +
+      '<div class="invite-card">' +
         (invite.card_url
           ? '<img class="invite-image" alt="" src="' + invite.card_url + '" />'
           : "") +
         '<span class="invite-tag">' + t("Shared event") + "</span>" +
         '<p class="invite-who"></p>' +
-        '<h3 class="invite-title"></h3>' +
+        '<h3 class="invite-title" id="inviteTitle" tabindex="-1" autofocus></h3>' +
         '<p class="invite-date"></p>' +
         '<p class="invite-error" id="inviteError" hidden></p>' +
         '<div class="invite-actions">' +
@@ -92,6 +103,10 @@
     overlay.querySelector("#inviteNo").textContent = t("Not now");
     overlay.querySelector("#inviteYes").textContent = t("Add to my events");
 
+    window.TMModal.open(overlay, {
+      requestClose: function () { close(overlay); },
+      onClose: function () { overlay.remove(); }
+    });
     requestAnimationFrame(function () { overlay.classList.add("is-open"); });
 
     overlay.querySelector("#inviteNo").addEventListener("click", function () {
@@ -109,8 +124,12 @@
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         });
         haptic("success");
-        close(overlay);
-        if (window.TMApp && window.TMApp.reload) window.TMApp.reload();
+        await close(overlay);
+        if (window.TMApp && window.TMApp.reload) await window.TMApp.reload();
+        // Nothing opened this card, so there is no opener to go back to: focus
+        // goes to the event that was just added.
+        var card = result.id && document.querySelector('.event-card[data-id="' + CSS.escape(result.id) + '"]');
+        if (card) card.focus();
         if (result.already_joined) alert(t("You already have this one."));
       } catch (error) {
         var code = String(error.message || "");

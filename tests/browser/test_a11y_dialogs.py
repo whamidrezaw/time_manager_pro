@@ -82,6 +82,9 @@ def open_dialog(open_app, name: str):
     if name == "onboarding":
         page = open_app(onboarding_seen=False)
         dialog, title = "#onboardingOverlay", "#onboardingTitle"
+    elif name == "invite":
+        page = open_app(invite=True)
+        dialog, title = ".invite-overlay", "#inviteTitle"
     else:
         page = open_app()
         if name == "composer":
@@ -107,6 +110,9 @@ def open_dialog(open_app, name: str):
             expect(page.locator("#detailSheet")).to_be_visible()
             page.click("#detailShareBtn")
             dialog, title = ".shr-overlay", "#shrTitle"
+        elif name == "referral":
+            page.click("#refOpenBtn")
+            dialog, title = ".ref-overlay", "#refTitle"
         elif name == "confirm-over-detail":
             page.focus(".event-card >> nth=0")
             page.keyboard.press("Enter")
@@ -121,7 +127,9 @@ def open_dialog(open_app, name: str):
 
 # ── Focus on open ────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["composer", "detail", "onboarding", "picker", "day", "share"])
+@pytest.mark.parametrize(
+    "name", ["composer", "detail", "onboarding", "picker", "day", "share", "referral", "invite"]
+)
 def test_opening_a_dialog_focuses_its_title(open_app, name):
     """Decided in Batch 20: a dialog starts at its title.
 
@@ -145,7 +153,9 @@ def test_the_confirm_starts_at_cancel(open_app):
 
 # ── Tab stays inside ─────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["composer", "detail", "onboarding", "picker", "day", "share"])
+@pytest.mark.parametrize(
+    "name", ["composer", "detail", "onboarding", "picker", "day", "share", "referral", "invite"]
+)
 def test_tab_never_leaves_an_open_dialog(open_app, name):
     """aria-modal was declared on every dialog, but nothing kept focus inside."""
     page, dialog, _ = open_dialog(open_app, name)
@@ -164,7 +174,9 @@ def test_tab_never_leaves_an_open_dialog(open_app, name):
 
 # ── Escape, and only the dialog on top ───────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["composer", "detail", "onboarding", "picker", "day", "share"])
+@pytest.mark.parametrize(
+    "name", ["composer", "detail", "onboarding", "picker", "day", "share", "referral", "invite"]
+)
 def test_escape_closes_the_dialog(open_app, name):
     """The picker already closed on Escape (guard); onboarding and the day sheet did not."""
     page, dialog, _ = open_dialog(open_app, name)
@@ -500,3 +512,79 @@ def test_without_native_dialogs_a_sheet_is_not_hidden_under_the_tab_bar(open_app
     }""", dialog)
 
     assert covered_by is None, f"the bottom of the {name} is covered by {covered_by}"
+
+
+
+# ── Invite friends, and the card that joins a shared event (2c) ─────────────
+
+@pytest.mark.parametrize(
+    "name", ["composer", "detail", "onboarding", "picker", "day", "share", "referral", "invite",
+             "confirm-over-detail"]
+)
+def test_an_open_dialog_is_named_by_its_title(open_app, name):
+    """4.1.2. A dialog is announced by its name; each one takes it from its title.
+
+    The join card was the one without any: role="dialog" and nothing to call it.
+    """
+    page, _, title = open_dialog(open_app, name)
+
+    naming = page.evaluate("""(title) => {
+        const heading = document.querySelector(title);
+        if (!heading) return 'no ' + title + ' on the page';
+        const dialog = heading.closest('dialog, [role=dialog], [role=alertdialog]');
+        if (!dialog) return 'no dialog around ' + title;
+        const ids = (dialog.getAttribute('aria-labelledby') || '').split(/\\s+/);
+        const named = ids.includes(heading.id) && heading.textContent.trim();
+        return named ? '' : 'the dialog is not named by ' + title;
+    }""", title)
+    assert not naming, naming
+
+
+def test_closing_invite_friends_returns_focus_to_its_button(open_app):
+    """The invite-friends sheet never gave focus back: after closing, it was on nothing."""
+    page, dialog, _ = open_dialog(open_app, "referral")
+    page.wait_for_timeout(200)
+    page.click("#refCloseBtn")
+    expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
+
+    assert eventually(page, lambda: focused(page) == "#refOpenBtn", 1.0), f"focus is on {focused(page)}"
+
+
+def test_invite_friends_shows_the_link_and_closes_on_a_tap_outside(open_app):
+    """Guard for what must stay as it is."""
+    page, dialog, _ = open_dialog(open_app, "referral")
+    expect(page.locator("#refLink")).not_to_have_value("", timeout=5000)
+    page.wait_for_timeout(200)
+    page.mouse.click(195, 12)
+
+    expect(page.locator(dialog)).to_be_hidden(timeout=FAST)
+
+
+def test_not_now_closes_the_join_card(open_app):
+    """Guard."""
+    page, dialog, _ = open_dialog(open_app, "invite")
+    page.click("#inviteNo")
+
+    expect(page.locator(dialog)).to_have_count(0, timeout=FAST)
+    expect(page.locator(".event-title", has_text="Book club")).to_have_count(0)
+
+
+def test_joining_adds_the_shared_event(open_app):
+    """Guard for the join card's main job."""
+    page, dialog, _ = open_dialog(open_app, "invite")
+    page.click("#inviteYes")
+
+    expect(page.locator(dialog)).to_have_count(0, timeout=5000)
+    expect(page.locator(".event-title", has_text="Book club")).to_have_count(1, timeout=5000)
+
+
+def test_joining_a_shared_event_puts_focus_on_it(open_app):
+    """Nothing opened the join card, so there is no opener to go back to; focus
+    went to nothing. It now lands on the event that was just added."""
+    page, dialog, _ = open_dialog(open_app, "invite")
+    page.click("#inviteYes")
+    expect(page.locator(".event-title", has_text="Book club")).to_have_count(1, timeout=5000)
+
+    assert eventually(page, lambda: "Book club" in focused_card_text(page), 2.0), (
+        f"focus is on {focused(page)}"
+    )
