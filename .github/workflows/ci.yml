@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "feat/**"]
   pull_request:
     branches: [main]
 jobs:
@@ -39,7 +39,7 @@ jobs:
         if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         run: pytest -v
       - name: Run tests (only the known failures may fail)
-        # fix/** branches: a batch carries its failing tests on purpose until
+        # fix/** and feat/** branches: a batch carries its failing tests on purpose until
         # they are fixed (tests/known_failures.txt). This fails on any other
         # failure, and on a known failure that started to pass, by name.
         if: github.ref != 'refs/heads/main' && github.event_name != 'pull_request'

@@ -22,7 +22,7 @@ file is not weakened in the same commit as a change that was failing it.
   that is running Chromium and a server alongside. The bar itself stays.
 
 - **Known failures.** A batch may carry failing tests on purpose, but only
-  the ones in `tests/known_failures.txt`. On `fix/**` branches CI runs
+  the ones in `tests/known_failures.txt`. On `fix/**` and `feat/**` branches CI runs
   `scripts/check_known_failures.py`, which fails on any other failure and on a
   listed test that passes; each fix removes its lines. `main` and pull
   requests into it run the full suite, where the list has to be empty. This is
@@ -33,7 +33,7 @@ file is not weakened in the same commit as a change that was failing it.
 
 | Dimension | Rule | Checked by | Runs at |
 |-----------|------|------------|---------|
-| Accessibility (external) | Zero serious or critical axe violations, tags `wcag2a wcag2aa wcag21a wcag21aa`, on list (light and dark), composer, detail and month | axe-core 4.13.0, vendored and SHA-256 pinned, in Chromium through Playwright: `pytest -m browser` | CI: every push to `main` and `fix/**`, and every PR |
+| Accessibility (external) | Zero serious or critical axe violations, tags `wcag2a wcag2aa wcag21a wcag21aa`, on list (light and dark), composer, detail and month | axe-core 4.13.0, vendored and SHA-256 pinned, in Chromium through Playwright: `pytest -m browser` | CI: every push to `main`, `fix/**` and `feat/**`, and every PR |
 | Accessibility (behaviour) | A11Y-01 to A11Y-09 in `docs/a11y/REQUIREMENTS.md` green | `pytest tests/browser tests/test_a11y_findings.py` | CI |
 | Contrast (fast) | Fallback palette text pairs ≥ 4.5:1 | `pytest tests/test_a11y_findings.py` | Every local run (milliseconds) |
 | Target size | Primary controls ≥ 44×44 CSS px (D3) | `test_primary_controls_are_at_least_44_css_pixels` | CI |
