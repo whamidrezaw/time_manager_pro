@@ -258,8 +258,67 @@ async def test_sending_a_reminder_touches_updated_at(settings):
 
 # ── CRITICAL 7 — card rendering blocks the event loop ───────────────────────
 
+def test_card_render_reuses_its_fonts_and_backdrop():
+    """Batch 19 took a render from 317 ms to ~55 by caching fonts and the
+    backdrop (bf9b1f0). Since Batch 20 that is pinned through its causes: a
+    timing bar measured the machine instead (a laptop's slower clock after the
+    browser suite read 109 ms for the same work)."""
+    from app.services.cards import render_event_card
+
+    event = {
+        "title": "Anniversary",
+        "date_iso": "2026-12-31",
+        "date_jalali": "1405/10/10",
+        "category": "family",
+        "all_day": True,
+        "tz_name": "Europe/Berlin",
+        "event_ts_utc": utc(days=100),
+        "bot_handle": "@Timemanager2026_bot",
+    }
+    from app.services import cards
+
+    render_event_card(event, "en")
+    fonts, backdrops = cards._font.cache_info().misses, cards._backdrop.cache_info().misses
+    render_event_card(event, "en")
+
+    assert cards._font.cache_info().misses == fonts, "a second render loaded its fonts again"
+    assert cards._backdrop.cache_info().misses == backdrops, "a second render rebuilt the backdrop"
+
+
+def test_card_png_is_saved_without_optimize(monkeypatch):
+    """The third cause in bf9b1f0: PNG optimize made each save several times slower."""
+    from app.services.cards import render_event_card
+
+    event = {
+        "title": "Anniversary",
+        "date_iso": "2026-12-31",
+        "date_jalali": "1405/10/10",
+        "category": "family",
+        "all_day": True,
+        "tz_name": "Europe/Berlin",
+        "event_ts_utc": utc(days=100),
+        "bot_handle": "@Timemanager2026_bot",
+    }
+    from PIL import Image
+
+    saved: dict = {}
+    real_save = Image.Image.save
+
+    def spy(self, fp, format=None, **params):
+        saved.update(params)
+        return real_save(self, fp, format, **params)
+
+    monkeypatch.setattr(Image.Image, "save", spy)
+    render_event_card(event, "en")
+
+    assert saved and not saved.get("optimize"), saved
+
+
 def test_card_render_is_fast_enough_to_serve():
-    """317ms of CPU on a public, unauthenticated endpoint is a DoS lever."""
+    """A coarse safety net, decided in Batch 20, for a slow step nobody has
+    thought of yet: 500 ms of this thread's CPU, fastest of five. The known
+    causes are pinned above without a clock; this only has to hold on slow
+    hardware too (a throttled laptop measured ~110 ms, 4.5 times under it)."""
     from app.services.cards import render_event_card
 
     event = {
@@ -273,12 +332,6 @@ def test_card_render_is_fast_enough_to_serve():
         "bot_handle": "@Timemanager2026_bot",
     }
     render_event_card(event, "en")  # warm up
-
-    # The question is what a render costs in CPU, so that is what is measured:
-    # this thread's CPU time, not the wall clock, which on a busy machine
-    # (Chromium and the live server run in the same suite) measured everything
-    # else too: 114 ms on a loaded Windows run for a render that costs ~55.
-    # Fastest of five, as the timeit documentation advises. The bar stays 80.
     runs = []
     for _ in range(5):
         start = time.thread_time()
@@ -286,7 +339,7 @@ def test_card_render_is_fast_enough_to_serve():
         runs.append((time.thread_time() - start) * 1000)
     elapsed_ms = min(runs)
 
-    assert elapsed_ms < 80, (
+    assert elapsed_ms < 500, (
         f"render took {elapsed_ms:.0f}ms of CPU at best (runs: {[round(r) for r in runs]})")
 
 
