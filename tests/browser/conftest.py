@@ -156,6 +156,13 @@ class FakeTelegramBot:
         return call
 
 
+async def _set_limit_override(user_id: str, value) -> None:
+    from app.db import get_database
+
+    overrides = get_database()["limit_overrides"]
+    await overrides.update_one({"_id": user_id}, {"$set": {"value": value}}, upsert=True)
+
+
 @pytest.fixture(scope="module")
 def live_server():
     import app.routes.sharegroup as sharegroup
@@ -267,13 +274,16 @@ def open_app(browser, live_server):
     opened: list[tuple[object, bool]] = []
 
     def factory(*, lang="en", scheme="light", theme=None, width=390,
-                onboarding_seen=True, telegram=True, invite=False, extra_events=0):
+                onboarding_seen=True, telegram=True, invite=False, extra_events=0,
+                limit_override=None):
         user_id = next(_users)
         seeded = [live_server.run(seed_event(user_id=str(user_id), **event)) for event in default_events()]
         for n in range(extra_events):  # fillers, for a user near or at the event limit
             live_server.run(seed_event(user_id=str(user_id), title=f"Filler {n + 1}",
                                        date_iso=(date.today() + timedelta(days=60 + n)).isoformat(),
                                        event_ts_utc=utc(days=60 + n)))
+        if limit_override is not None:  # as the admin's /limit would set it
+            live_server.run(_set_limit_override(str(user_id), limit_override))
         start_param = ""
         if invite:
             # Opened from a friend's ?startapp=s_<token> link to "Book club".

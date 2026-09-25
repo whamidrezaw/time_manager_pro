@@ -166,6 +166,25 @@ list with comments.
 | `OVERDUE_AFTER_MINUTES` | How late a pending reminder may be before it is reported |
 | `REMINDER_POLL_INTERVAL_SECS`, `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Worker tuning |
 
+### Admin commands
+
+The admin is `ADMIN_CHAT_ID` and nobody else; to anyone else these are unknown
+commands. Send them to the bot:
+
+| Command | Does |
+|---|---|
+| `/limits` | the current base limit, invite reward and technical ceiling |
+| `/limit @user` or `/limit 123456789` | one user's events, limit, and where it comes from |
+| `/limit @user 100` | a limit of their own, from 1 up to the ceiling |
+| `/limit @user unlimited` | no limit of their own (the ceiling still applies) |
+| `/limit @user default` | back to the formula |
+| `/setbase 30`, `/setbonus 20`, `/setstep 3` | change the formula at once, no redeploy |
+| `/setbase default` (and the others) | back to the environment's value |
+
+The admin's own account is unlimited. A `@username` is known once that user
+has used the bot or the app; the numeric id always works. Every change is
+written to the `admin_audit` collection.
+
 ## Tests
 
 ```bash

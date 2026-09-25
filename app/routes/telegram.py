@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 
 from app.config import Settings, get_settings
+from app.services.admin import ADMIN_COMMANDS, handle_admin_command, is_admin, remember_username
 from app.services.reminders import handle_snooze_callback
 from app.utils.i18n import resolve_language, t
 
@@ -93,6 +94,17 @@ def parse_start_payload(text: str) -> str:
 async def _handle_message(update: Update, bot: Bot, settings: Settings) -> None:
     message = update.message
     command = parse_command(message.text or "")
+
+    # So the admin can name this user as @username (Batch 20).
+    sender_id = getattr(message.from_user, "id", None)
+    await remember_username(sender_id, getattr(message.from_user, "username", None))
+    if command in ADMIN_COMMANDS and is_admin(sender_id, settings):
+        try:
+            reply = await handle_admin_command(message.text or "", str(sender_id), settings)
+            await bot.send_message(chat_id=message.chat_id, text=reply)
+        except Exception:
+            logger.exception("Admin command failed: %s", command)
+        return
 
     # No storage needed here: Telegram hands us the sender's language on every
     # update, so a user who switches language sees the change immediately.

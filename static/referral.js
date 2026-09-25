@@ -29,6 +29,9 @@
     "{valid} joined": "{valid} نفر پیوسته‌اند",
     "{pending} on the way": "{pending} نفر در راه",
     "You've reached your event limit": "به سقف رویدادهایت رسیدی",
+    "Unlimited": "نامحدود",
+    "No limit on your events": "برای رویدادهایت محدودیتی نیست",
+    "Your limit was set for you": "سقف تو به‌طور ویژه تنظیم شده است",
     "You've used {used} of your {limit} events. Invite friends to get more.":
       "{used} از {limit} رویداد شما استفاده شده است. با دعوت دوستان سقف را بالا ببرید.",
     "Invite now": "همین حالا دعوت کن",
@@ -190,15 +193,20 @@
       { step: num(state.step), bonus: num(state.bonus) }
     );
 
-    els.usage.textContent = num(state.used) + " / " + num(state.limit) + " " + t("events used");
-    els.next.textContent = state.at_cap
+    // Set by the admin (Batch 20): unlimited, or a limit invites do not raise.
+    els.usage.textContent = state.unlimited
+      ? num(state.used) + " " + t("events used") + " · " + t("Unlimited")
+      : num(state.used) + " / " + num(state.limit) + " " + t("events used");
+    els.next.textContent = state.unlimited ? t("No limit on your events")
+      : state.source === "custom" ? t("Your limit was set for you")
+      : state.at_cap
       ? t("You have reached the highest limit. Thank you!")
       : t("{n} more to go for +{bonus} events", {
           n: num(state.invites_to_next),
           bonus: num(state.bonus),
         });
 
-    var ratio = state.limit > 0 ? Math.min(state.used / state.limit, 1) : 0;
+    var ratio = state.unlimited ? 0 : state.limit > 0 ? Math.min(state.used / state.limit, 1) : 0;
     els.fill.style.width = (ratio * 100).toFixed(1) + "%";
     els.fill.classList.toggle("is-hot", ratio >= NEAR_LIMIT_RATIO);
 
@@ -216,7 +224,8 @@
 
     // Only once the limit is reached (Batch 20): below it the list keeps the
     // room, and at the hard ceiling invites cannot raise it any more.
-    if (state.at_cap || state.used < state.limit) {
+    // Nor for a limit the admin set: inviting would not raise it.
+    if (state.unlimited || state.source === "custom" || state.at_cap || state.used < state.limit) {
       if (existing) existing.remove();
       return;
     }

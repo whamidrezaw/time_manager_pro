@@ -31,3 +31,15 @@ def test_at_the_limit_the_nudge_says_so_and_offers_invites(open_app):
     expect(nudge).to_be_visible(timeout=4000)
     expect(nudge).to_contain_text("You've reached your event limit")
     expect(nudge.locator("button")).to_have_text("Invite now")
+
+
+def test_an_unlimited_user_sees_unlimited_and_no_nudge(open_app):
+    """Admin control (Batch 20): a user the admin made unlimited is past the
+    base limit and still sees no nudge; the invite sheet says Unlimited."""
+    page = open_app(extra_events=get_settings().event_limit_base - DEFAULT_EVENTS, limit_override="unlimited")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(500)
+
+    expect(page.locator("#refNudge")).to_have_count(0)
+    page.click("#refOpenBtn")
+    expect(page.locator("#refUsage")).to_contain_text("Unlimited", timeout=4000)

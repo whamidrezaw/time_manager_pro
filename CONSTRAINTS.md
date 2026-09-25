@@ -109,6 +109,14 @@ with no colour changed.
   but out of the Tab order; it sits inside `aria-hidden`, and the month grid
   is the keyboard way to the same day.
 
+- **D13 — admin (Batch 20):** the only admin is `ADMIN_CHAT_ID` from the
+  environment; no command grants the role. The admin's account is unlimited.
+  Per-user limits (a number or unlimited) and the formula's numbers change at
+  runtime from the bot and live in collections of their own, never on the user
+  document the referral logic reads. Unlimited stops at `MAX_EVENTS_PER_USER`.
+  Every change is audited. Card-render speed is pinned through its causes (the
+  font and backdrop caches, no PNG optimize), with a 500 ms CPU safety net.
+
 ## Exceptions
 
 | ID | Rule | Path | Reason | Owner | Expires |
