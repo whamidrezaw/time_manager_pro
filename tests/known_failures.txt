@@ -6,9 +6,4 @@
 # removes its lines. main and pull requests into main run the full suite, where
 # this list has to be empty. See CONSTRAINTS.md.
 
-# A11Y-07: the public countdown page
-tests/test_a11y_findings.py::test_the_countdown_image_alt_text_carries_the_countdown
-tests/test_a11y_findings.py::test_the_countdown_page_has_a_main_landmark_and_a_heading
-
-# A11Y-09: a clean console under the production CSP
-tests/browser/test_a11y_browser.py::test_opening_the_app_outside_telegram_raises_no_csp_violation
+# Empty since Batch 20, step 13: every finding of the batch is fixed.

@@ -23,14 +23,25 @@
   /* ── Telegram WebApp ────────────────────────────────── */
   const tg = window.Telegram?.WebApp || null;
 
+  // Built from nodes and stylesheet classes (A11Y-09): the production CSP
+  // refuses style attributes, so the old markup was shown unstyled with a
+  // console error, and textContent needs no escaping.
   function fatal(message) {
-    document.body.innerHTML = `
-      <div style="padding:40px 20px;text-align:center;font-family:system-ui,sans-serif;">
-        <div style="font-size:2.5rem;margin-bottom:16px;">⚠️</div>
-        <h2 style="margin:0 0 12px;font-size:1.2rem;">Something went wrong</h2>
-        <p style="color:#666;margin:0;">${String(message).replace(/</g, "&lt;")}</p>
-      </div>
-    `;
+    const box = document.createElement("main");
+    box.className = "fatal";
+    const icon = document.createElement("div");
+    icon.className = "fatal-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "⚠️";
+    const title = document.createElement("h1");
+    title.className = "fatal-title";
+    title.textContent = "Something went wrong";
+    const text = document.createElement("p");
+    text.className = "fatal-text";
+    text.textContent = String(message);
+    box.append(icon, title, text);
+    document.body.textContent = "";
+    document.body.appendChild(box);
   }
 
   if (!tg) {

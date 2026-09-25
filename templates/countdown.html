@@ -18,11 +18,14 @@
   <link rel="stylesheet" href="/static/countdown.css?v={{ asset_version }}" />
 </head>
 <body data-miniapp-url="{{ miniapp_url }}">
-  <img src="{{ card_url }}" alt="{{ title }}" />
-  {% if join_url %}<a class="cta" href="{{ join_url }}">{{ join_label }}</a>
-  <a class="cta cta-quiet" href="{{ miniapp_url }}">{{ open_label }}</a>
-  {% else %}<a class="cta" href="{{ miniapp_url }}">{{ open_label }}</a>
-  {% endif %}
+  <main>
+    <h1 class="sr-only">{{ title }}</h1>
+    <img src="{{ card_url }}" alt="{{ card_alt }}" />
+    {% if join_url %}<a class="cta" href="{{ join_url }}">{{ join_label }}</a>
+    <a class="cta cta-quiet" href="{{ miniapp_url }}">{{ open_label }}</a>
+    {% else %}<a class="cta" href="{{ miniapp_url }}">{{ open_label }}</a>
+    {% endif %}
+  </main>
   <footer>{{ made_with }} · {{ bot_handle }}</footer>
 
   <script src="/static/countdown.js?v={{ asset_version }}" defer></script>

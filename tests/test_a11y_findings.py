@@ -365,6 +365,17 @@ async def test_the_countdown_image_alt_text_carries_the_countdown(fake_db):
     assert str(days) in alt, f"alt is {alt!r}, but the image says {days} days"
 
 
+@pytest.mark.parametrize("days, words", [(0, "Today"), (-3, "3 days ago")])
+async def test_the_countdown_alt_also_says_today_and_past(fake_db, days, words):
+    """A11Y-07: the alt says what the image says, on the day and afterwards too,
+    in the card's own words."""
+    when = (datetime.now(timezone.utc) + timedelta(days=days)).date().isoformat()
+    body, _ = await _render_countdown(date_iso=when, event_ts_utc=utc(days=days))
+    alt = next(node.attrs.get("alt", "") for node in parse(body) if node.tag == "img")
+
+    assert words.lower() in alt.lower(), f"alt is {alt!r}"
+
+
 async def test_the_countdown_page_has_a_main_landmark_and_a_heading(fake_db):
     """A11Y-07 / 1.3.1. The page is an image, two links and a footer, with no structure."""
     body, _ = await _render_countdown()

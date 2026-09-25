@@ -174,6 +174,13 @@ def _backdrop() -> Image.Image:
     return canvas
 
 
+def countdown_words(event: dict, language: str = "en") -> str:
+    """The countdown as the card image puts it ("12 days left", "Today",
+    "3 days ago"), in plain text, for the page's alt text (A11Y-07)."""
+    headline, unit, _ = _headline(event, language, language == "fa")
+    return f"{headline} {unit}".strip()
+
+
 def render_event_card(event: dict, language: str = "en") -> bytes:
     """A square PNG of one event, ready to be posted into a chat."""
     rtl = language == "fa"
