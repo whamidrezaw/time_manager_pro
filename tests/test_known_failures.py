@@ -79,7 +79,8 @@ def test_every_listed_failure_names_a_test_that_exists():
     entries = [line.strip() for line in LIST.read_text(encoding="utf-8").splitlines()]
     entries = [e for e in entries if e and not e.startswith("#")]
     broken = [e for e in entries if "::" not in e or not (ROOT / e.split("::")[0]).exists()]
-    assert entries and not broken, f"entries that name no test file: {broken}"
+    # An empty list is where every batch ends (Batch 20 was the first to get there).
+    assert not broken, f"entries that name no test file: {broken}"
 
 
 def test_ci_runs_the_full_suite_on_main_and_the_gate_elsewhere():
