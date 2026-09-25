@@ -259,3 +259,12 @@ async def test_the_third_valid_invite_reports_a_bonus(referrals, monkeypatch) ->
     assert await referrals.module.activate_referral_if_first_event("303") == ("200", 3)
 
     assert await referrals.module.effective_event_limit("200", SETTINGS) == 40
+
+
+def test_the_default_base_limit_is_25():
+    """Decided in Batch 20: 25 events before any invite (it was 20). The
+    formula tests above pin their own settings; this pins the default that
+    production runs with, as EVENT_LIMIT_BASE is not set on Render."""
+    from app.config import Settings
+
+    assert Settings.model_fields["event_limit_base"].default == 25

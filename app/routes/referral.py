@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 
 from app.config import get_settings
 from app.schemas.common import InitDataPayload
+from app.services.admin import remember_username
 from app.services.auth import READ_SCOPE, validate_init_data
 from app.services.referrals import (
     attach_referrer,
@@ -30,6 +31,7 @@ async def api_referral(request: Request, payload: InitDataPayload) -> dict:
     settings = get_settings()
     auth = await validate_init_data(request, payload.initData, settings, scope=READ_SCOPE)
     user_id = auth["user_id"]
+    await remember_username(user_id, (auth.get("user") or {}).get("username"))
 
     code = parse_ref_payload((auth.get("raw") or {}).get("start_param"))
     if code:

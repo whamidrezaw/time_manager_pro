@@ -159,12 +159,31 @@ list with comments.
 | `TELEGRAM_BOT_USERNAME`, `TELEGRAM_MINI_APP_SHORT_NAME` | Used to build deep links |
 | `RATE_LIMIT_COUNT` | Requests allowed per user per minute |
 | `MAX_EVENTS_PER_USER`, `MAX_TITLE_LEN`, `MAX_NOTE_LEN` | Per-user limits (`MAX_EVENTS_PER_USER` is the hard ceiling) |
-| `EVENT_LIMIT_BASE`, `REFERRAL_STEP`, `REFERRAL_BONUS` | Referral reward: start at 20 events, +20 per 3 valid invites |
+| `EVENT_LIMIT_BASE`, `REFERRAL_STEP`, `REFERRAL_BONUS` | Referral reward: start at 25 events, +20 per 3 valid invites |
 | `WEBAPP_BASE_URL` | Also the origin of public countdown links (`/c/<token>`) and share cards |
 | `TASKS_SECRET` | Shared secret for `POST /tasks/run-reminders`; empty keeps the endpoint closed |
 | `ADMIN_CHAT_ID` | Your Telegram user id — where the health report is sent |
 | `OVERDUE_AFTER_MINUTES` | How late a pending reminder may be before it is reported |
 | `REMINDER_POLL_INTERVAL_SECS`, `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Worker tuning |
+
+### Admin commands
+
+The admin is `ADMIN_CHAT_ID` and nobody else; to anyone else these are unknown
+commands. Send them to the bot:
+
+| Command | Does |
+|---|---|
+| `/limits` | the current base limit, invite reward and technical ceiling |
+| `/limit @user` or `/limit 123456789` | one user's events, limit, and where it comes from |
+| `/limit @user 100` | a limit of their own, from 1 up to the ceiling |
+| `/limit @user unlimited` | no limit of their own (the ceiling still applies) |
+| `/limit @user default` | back to the formula |
+| `/setbase 30`, `/setbonus 20`, `/setstep 3` | change the formula at once, no redeploy |
+| `/setbase default` (and the others) | back to the environment's value |
+
+The admin's own account is unlimited. A `@username` is known once that user
+has used the bot or the app; the numeric id always works. Every change is
+written to the `admin_audit` collection.
 
 ## Tests
 

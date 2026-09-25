@@ -8,6 +8,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.config import Settings, get_settings
 from app.db import get_events_collection, get_users_collection
+from app.services.admin import limit_status, runtime_settings
 
 logger = logging.getLogger("tm_pro.referrals")
 
@@ -220,6 +221,16 @@ async def effective_event_limit(user_id: str, settings: Settings | None = None) 
     """
     settings = settings or get_settings()
 
+    # The admin's word first (Batch 20): their own account, or a limit of the
+    # user's own. Then the formula, with the admin's changes to its numbers.
+    try:
+        status = await limit_status(user_id, settings)
+        if status["limit"] is not None:
+            return status["limit"]
+        settings = await runtime_settings(settings)
+    except Exception:
+        logger.exception("admin limit lookup failed user_id=%s", user_id)
+
     try:
         valid = await count_valid_invites(user_id)
     except Exception:
@@ -266,7 +277,7 @@ async def activate_referral_if_first_event(user_id: str) -> tuple[str, int] | No
         "referral valid invitee=%s referrer=%s total=%s", user_id, referrer_id, valid_count
     )
 
-    settings = get_settings()
+    settings = await runtime_settings(get_settings())
     step = max(settings.referral_step, 1)
     at_cap = compute_event_limit(valid_count, settings) >= settings.max_events_per_user
 
@@ -283,7 +294,9 @@ async def referral_overview(user_id: str, settings: Settings | None = None) -> d
     valid = await count_valid_invites(user_id)
     pending = await count_pending_invites(user_id)
     used = await get_events_collection().count_documents({"user_id": user_id})
-    limit = compute_event_limit(valid, settings)
+    status = await limit_status(user_id, settings)
+    settings = await runtime_settings(settings)
+    limit = status["limit"] if status["limit"] is not None else compute_event_limit(valid, settings)
 
     return {
         "success": True,
@@ -298,6 +311,8 @@ async def referral_overview(user_id: str, settings: Settings | None = None) -> d
         "bonus": settings.referral_bonus,
         "invites_to_next": invites_to_next_bonus(valid, settings),
         "at_cap": limit >= settings.max_events_per_user,
+        "unlimited": status["unlimited"],
+        "source": status["source"],
     }
 
 

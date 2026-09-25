@@ -1,0 +1,9 @@
+# Tests that fail on purpose on this branch, and nothing else may.
+#
+# Each is a finding with a requirement in docs/a11y/REQUIREMENTS.md, red until
+# its fix lands. On fix/** branches CI runs scripts/check_known_failures.py,
+# which fails on any other failure and on a listed test that passes; each fix
+# removes its lines. main and pull requests into main run the full suite, where
+# this list has to be empty. See CONSTRAINTS.md.
+
+# Empty since Batch 20, step 13: every finding of the batch is fixed.

@@ -23,14 +23,25 @@
   /* ── Telegram WebApp ────────────────────────────────── */
   const tg = window.Telegram?.WebApp || null;
 
+  // Built from nodes and stylesheet classes (A11Y-09): the production CSP
+  // refuses style attributes, so the old markup was shown unstyled with a
+  // console error, and textContent needs no escaping.
   function fatal(message) {
-    document.body.innerHTML = `
-      <div style="padding:40px 20px;text-align:center;font-family:system-ui,sans-serif;">
-        <div style="font-size:2.5rem;margin-bottom:16px;">⚠️</div>
-        <h2 style="margin:0 0 12px;font-size:1.2rem;">Something went wrong</h2>
-        <p style="color:#666;margin:0;">${String(message).replace(/</g, "&lt;")}</p>
-      </div>
-    `;
+    const box = document.createElement("main");
+    box.className = "fatal";
+    const icon = document.createElement("div");
+    icon.className = "fatal-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "⚠️";
+    const title = document.createElement("h1");
+    title.className = "fatal-title";
+    title.textContent = "Something went wrong";
+    const text = document.createElement("p");
+    text.className = "fatal-text";
+    text.textContent = String(message);
+    box.append(icon, title, text);
+    document.body.textContent = "";
+    document.body.appendChild(box);
   }
 
   if (!tg) {
@@ -56,7 +67,6 @@
     activeSheet: null,
     detailEventId: null,
     editingEventId: null,
-    lastFocusedElement: null,
     skip: 0,
     hasMore: false,
     isLoading: false,
@@ -85,6 +95,7 @@
     searchInput:        $("searchInput"),
     filterButtons:      $$("[data-filter]"),
     eventsWrap:         $("eventsWrap"),
+    listStatus:         $("listStatus"),
     listState:          $("listState"),
     listErrorState:     $("listErrorState"),
     noResultsState:     $("noResultsState"),
@@ -158,7 +169,8 @@
     confirmOkBtn:       $("confirmOkBtn"),
     confirmCancelBtn:   $("confirmCancelBtn"),
 
-    sheetOverlay:       $("sheetOverlay"),
+    composerHost:       $("composerHost"),
+    detailHost:         $("detailHost"),
   };
 
   /* ── Label Maps ─────────────────────────────────────── */
@@ -197,6 +209,11 @@
       "Filters and search": "فیلتر و جست‌وجو",
       "Category filter": "فیلتر دسته",
       "Search events…": "جست‌وجوی رویداد…",
+      "Search events": "جست‌وجوی رویداد",
+      "No events found": "رویدادی پیدا نشد",
+      "1 event": "۱ رویداد",
+      "{count} events": "{count} رویداد",
+      "Note and checklist": "یادداشت و چک‌لیست",
       "Event list": "فهرست رویدادها",
       "🌐 All": "🌐 همه",
       "📌 Pinned": "📌 سنجاق‌شده",
@@ -489,6 +506,46 @@
     destructive_text_color:  "--tg-danger",
   };
 
+  // D4 (Batch 20): the app cannot choose the user's Telegram theme, so a text
+  // colour that theme hands over is used only once it reads at 4.5:1 on the
+  // backgrounds it sits on. One that does not keeps its hue and moves towards
+  // black, or towards white on a dark theme, only as far as it takes.
+  const READABLE_TEXT_PARAMS = ["subtitle_text_color", "hint_color", "link_color", "destructive_text_color"];
+
+  function hexToRgb(hex) {
+    const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex).trim());
+    if (!match) return null;
+    const h = match[1].length === 3 ? match[1].replace(/./g, (c) => c + c) : match[1];
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  }
+
+  function luminance(rgb) {
+    const [r, g, b] = rgb.map((v) => {
+      const c = v / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  function contrastRatio(a, b) {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  function readableOn(colour, backgrounds) {
+    const rgb = hexToRgb(colour);
+    const bgs = backgrounds.map(hexToRgb).filter(Boolean);
+    if (!rgb || !bgs.length) return colour;
+    const worst = (c) => Math.min(...bgs.map((bg) => contrastRatio(c, bg)));
+    if (worst(rgb) >= 4.5) return colour;
+    const towards = luminance(bgs[0]) > 0.18 ? 0 : 255;
+    for (let t = 0.02; t <= 1; t += 0.02) {
+      const moved = rgb.map((v) => Math.round(v + (towards - v) * t));
+      if (worst(moved) >= 4.6) return "#" + moved.map((v) => v.toString(16).padStart(2, "0")).join("");
+    }
+    return towards === 0 ? "#000000" : "#ffffff";
+  }
+
   function initTelegram() {
     try {
       applyTelegramTheme();
@@ -501,10 +558,20 @@
     const root = document.documentElement;
     const params = tg?.themeParams || {};
 
+    // The backgrounds text sits on: the theme's own, else the stylesheet's.
+    const backgrounds = ["bg_color", "secondary_bg_color", "section_bg_color"]
+      .map((key) => params[key])
+      .filter((v) => typeof v === "string" && v.trim());
+    if (!backgrounds.length) {
+      backgrounds.push(...(tg?.colorScheme === "dark" ? ["#1a1d38", "#0f1024"] : ["#ffffff", "#f0f2ff"]));
+    }
+
     Object.entries(TG_THEME_MAP).forEach(([key, cssVar]) => {
       const value = params[key];
       if (typeof value === "string" && value.trim()) {
-        root.style.setProperty(cssVar, value.trim());
+        const colour = value.trim();
+        root.style.setProperty(cssVar,
+          READABLE_TEXT_PARAMS.includes(key) ? readableOn(colour, backgrounds) : colour);
       } else {
         // Client didn't send this one — drop back to the stylesheet default
         // instead of keeping a stale value from the previous theme.
@@ -550,12 +617,11 @@
   }
 
   /* ── Custom Confirm Dialog ──────────────────────────── */
-  // A native <dialog> opened with showModal(): the browser moves focus into
-  // it, makes the page behind it inert and closes it on Escape or a back
-  // gesture. What this code guarantees is that every opening settles exactly
-  // one decision, however the dialog ends up closed. Before, a dismissal that
-  // bypassed the buttons left the OK handler armed, and the next confirmation
-  // also deleted the event the user had cancelled.
+  // Opened through TMModal (static/modal.js), which owns focus, the dialog
+  // stack and Escape. What this function guarantees is that every opening
+  // settles exactly one decision, however the dialog ends up closed. Before
+  // Batch 20, a dismissal that bypassed the buttons left the OK handler armed,
+  // and the next confirmation also deleted the event the user had cancelled.
   let settleOpenConfirm = null;
 
   function showConfirm({ title, text, okLabel = "Confirm", icon = "🗑️" }) {
@@ -573,52 +639,22 @@
     if (iconEl) iconEl.textContent = icon;
 
     return new Promise((resolve) => {
-      const opener = document.activeElement;
-      let settled = false;
+      const onOk = () => window.TMModal.close(dialog, true);
+      const onCancel = () => window.TMModal.close(dialog, false);
 
-      const onOk = () => settle(true);
-      const onCancel = () => settle(false);
-      // "close" is dispatched asynchronously. When a stale one from the
-      // previous opening arrives, this dialog is already open again, and that
-      // event is no answer to this question.
-      const onClose = () => { if (!dialog.open) settle(false); };
-      const onKey = (e) => {
-        if (e.key !== "Escape") return;
-        e.stopPropagation();
-        settle(false);
-      };
-
+      // TMModal calls this exactly once per opening: for the buttons, Escape,
+      // Telegram's back button and a newer question alike.
       function settle(result) {
-        if (settled) return;
-        settled = true;
         settleOpenConfirm = null;
         els.confirmOkBtn.removeEventListener("click", onOk);
         els.confirmCancelBtn.removeEventListener("click", onCancel);
-        dialog.removeEventListener("close", onClose);
-        dialog.removeEventListener("keydown", onKey);
-        if (typeof dialog.close === "function") {
-          if (dialog.open) dialog.close();          // the browser restores focus
-        } else {
-          dialog.removeAttribute("open");
-          opener?.focus?.();
-        }
-        resolve(result);
+        resolve(result === true);
       }
 
-      settleOpenConfirm = settle;
+      settleOpenConfirm = (result) => window.TMModal.close(dialog, result);
       els.confirmOkBtn.addEventListener("click", onOk);
       els.confirmCancelBtn.addEventListener("click", onCancel);
-      dialog.addEventListener("close", onClose);
-
-      if (typeof dialog.showModal === "function") {
-        dialog.showModal();
-      } else {
-        // WebViews without <dialog> (iOS before 15.4): the same single
-        // decision, without the browser's modality.
-        dialog.setAttribute("open", "");
-        dialog.addEventListener("keydown", onKey);
-        els.confirmCancelBtn.focus();
-      }
+      window.TMModal.open(dialog, { focus: els.confirmCancelBtn, onClose: settle });
     });
   }
 
@@ -667,6 +703,23 @@
   // the list still feels like it reacts as you type.
   const SEARCH_DEBOUNCE_MS = 350;
 
+  // Set only by a filter or a search, so loading or reloading the list after a
+  // save stays quiet; the next finished load then says what it left.
+  let announceCountNext = false;
+
+  function announceCount() {
+    if (!els.listStatus) return;
+    const n = state.filteredEvents.length;
+    const fa = document.documentElement.lang === "fa";
+    const count = (fa ? String(n).replace(/[0-9]/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]) : String(n)) + (state.hasMore ? "+" : "");
+    const text = n === 0 ? t("No events found")
+      : n === 1 && !state.hasMore ? t("1 event")
+      : t("{count} events", { count });
+    // Emptied first, so the same text twice in a row is still announced.
+    els.listStatus.textContent = "";
+    requestAnimationFrame(() => { els.listStatus.textContent = text; });
+  }
+
   async function loadEvents(append = false) {
     if (!append) {
       state.skip = 0;
@@ -702,6 +755,10 @@
       renderEvents();
       updateCounters();
       showStatePanel();
+      if (!append && announceCountNext) {
+        announceCountNext = false;
+        announceCount();
+      }
 
       if (els.loadMoreWrap) els.loadMoreWrap.hidden = !state.hasMore;
     } catch (error) {
@@ -1050,9 +1107,10 @@
     let node = headerIndex.get(key);
     if (node) return node;
 
-    node = document.createElement("div");
+    // A real heading: Pinned, Today, Tomorrow and Later are how the list is
+    // organised, and a screen reader can now jump between them.
+    node = document.createElement("h2");
     node.className = `event-section section-${key}`;
-    node.setAttribute("role", "presentation");
     node.innerHTML = '<span class="event-section-label"></span>';
     node.firstChild.textContent = t(SECTION_LABELS[key] || key);
     headerIndex.set(key, node);
@@ -1075,11 +1133,16 @@
     art.tabIndex = 0;
     art.setAttribute("role", "button");
     art.dataset.id = id;
+    // One button per card (option D, Batch 20): named by its title, described
+    // by its own badges, dates and status, so every screen reader gets the
+    // countdown too. A heading inside a button would be flattened into it.
+    art.setAttribute("aria-labelledby", `evt-${id}-t`);
+    art.setAttribute("aria-describedby", `evt-${id}-i evt-${id}-d evt-${id}-s`);
     art.innerHTML = `
       <div class="event-card-top">
         <div class="event-head">
-          <h3 class="event-title" data-f="title"></h3>
-          <div class="event-badges">
+          <span class="event-title" data-f="title" id="evt-${id}-t"></span>
+          <div class="event-badges" id="evt-${id}-i">
             <span class="badge badge-pin" data-f="pin" hidden>${CARD_ICONS.pin}<span data-f="pinText"></span></span>
             <span class="badge" data-f="cat"></span>
             <span class="urgency-badge" data-f="urgency"></span>
@@ -1095,14 +1158,14 @@
         <span class="event-progress-label" data-f="progress"></span>
       </div>
 
-      <div class="event-dates">
+      <div class="event-dates" id="evt-${id}-d">
         <span class="event-date-item">${CARD_ICONS.calendar}<span data-f="iso"></span></span>
         <span class="event-dates-sep">•</span>
         <span class="event-date-item">${CARD_ICONS.moon}<span data-f="jalali"></span></span>
         <span class="event-date-item event-reminder" data-f="reminderWrap" hidden>${CARD_ICONS.bell}<span data-f="reminder"></span></span>
       </div>
 
-      <div class="event-bottom">
+      <div class="event-bottom" id="evt-${id}-s">
         <span class="status-dot" data-f="dot"></span>
         <span data-f="status"></span>
       </div>
@@ -1144,7 +1207,6 @@
     const catLabel = CATEGORY_LABELS[event.category] || "🌐 General";
 
     art.className = `event-card cat-${event.category || "general"} tone-${cd.tone}`;
-    art.setAttribute("aria-label", t("Open details for {title}", { title: event.title }));
 
     f.title.textContent = event.title || "";
     f.pin.hidden = !event.pinned;
@@ -1295,36 +1357,37 @@
   }
 
   /* ── Sheet Management ────────────────────────────────── */
-  function openSheet(name, focusTgt = null) {
-    state.lastFocusedElement = document.activeElement;
-    if (els.sheetOverlay) els.sheetOverlay.hidden = false;
+  // The composer and the detail page each open in a <dialog> host through
+  // TMModal (static/modal.js), one at a time as before. Closing the other one
+  // first sends its focus home, and the sheet opened next remembers that
+  // place as its own way back: after Edit, closing the composer returns to
+  // the event instead of a hidden Edit button.
+  function sheetHost(name) {
+    return name === "composerSheet" ? els.composerHost : els.detailHost;
+  }
 
-    [els.composerSheet, els.detailSheet].forEach((sheet) => {
-      if (!sheet) return;
-      const active = sheet.id === name;
-      sheet.hidden = !active;
-      sheet.setAttribute("aria-hidden", String(!active));
-    });
-
+  function openSheet(name) {
+    window.TMModal.close(sheetHost(name === "composerSheet" ? "detailSheet" : "composerSheet"));
     state.activeSheet = name;
     if (els.openComposerBtn) {
       els.openComposerBtn.setAttribute("aria-expanded", String(name === "composerSheet"));
     }
     updateTgBackButton();
-    setTimeout(() => focusTgt?.focus?.(), 40);
+    window.TMModal.open(sheetHost(name), { onClose: () => sheetClosed(name) });
   }
 
   function closeSheets() {
-    [els.composerSheet, els.detailSheet].forEach((sheet) => {
-      if (!sheet) return;
-      sheet.hidden = true;
-      sheet.setAttribute("aria-hidden", "true");
-    });
-    if (els.sheetOverlay) els.sheetOverlay.hidden = true;
+    window.TMModal.close(els.composerHost);
+    window.TMModal.close(els.detailHost);
+  }
+
+  // However a sheet was closed: its buttons, Escape, Telegram's back button,
+  // a tap outside it, or the other sheet taking its place.
+  function sheetClosed(name) {
+    if (state.activeSheet !== name) return;
     state.activeSheet = null;
     if (els.openComposerBtn) els.openComposerBtn.setAttribute("aria-expanded", "false");
     updateTgBackButton();
-    state.lastFocusedElement?.focus?.();
   }
 
   function updateTgBackButton() {
@@ -1340,8 +1403,8 @@
   }
 
   function handleTgBack() {
-    if (closeDatePicker()) return;
-    if (state.activeSheet) closeSheets();
+    // The topmost dialog only: a confirm over the detail page closes alone.
+    window.TMModal.closeTop();
   }
 
   /* ── Composer ────────────────────────────────────────── */
@@ -1368,8 +1431,31 @@
     if (els.repeatUntil && els.date?.value) els.repeatUntil.min = els.date.value;
   }
 
+  // A11Y-06: a validation error stays on its field, visible and in the
+  // accessibility tree, until the user changes that field. It used to be a
+  // toast that was gone after 2.8 s.
+  function showFieldError(input, message) {
+    const box = input && document.getElementById(`${input.id}Error`);
+    if (!box) { showToast(message, "error"); return; }
+    box.textContent = message;
+    box.hidden = false;
+    input.setAttribute("aria-invalid", "true");
+    input.setAttribute("aria-describedby", box.id);
+    input.focus();
+  }
+
+  function clearFieldError(input) {
+    const box = input && document.getElementById(`${input.id}Error`);
+    if (!box || box.hidden) return;
+    box.hidden = true;
+    box.textContent = "";
+    input.removeAttribute("aria-invalid");
+    input.removeAttribute("aria-describedby");
+  }
+
   function resetComposer() {
     els.eventForm?.reset();
+    [els.title, els.date, els.eventTime].forEach(clearFieldError);
     if (els.eventId)        els.eventId.value       = "";
     if (els.dateJalali)     els.dateJalali.value     = "";
     if (els.noteCharCount)  els.noteCharCount.textContent = "0 / 2000";
@@ -1385,7 +1471,7 @@
 
   function openCreateComposer() {
     resetComposer();
-    openSheet("composerSheet", els.title);
+    openSheet("composerSheet");
   }
 
   function openEditComposer(event) {
@@ -1436,7 +1522,7 @@
     if (els.composerTitle)    els.composerTitle.textContent    = t("Edit Event");
     if (els.composerSubtitle) els.composerSubtitle.textContent = "Update the event details.";
     if (els.saveEventBtn)     els.saveEventBtn.textContent     = "Save Changes";
-    openSheet("composerSheet", els.title);
+    openSheet("composerSheet");
   }
 
   /* ── Detail Panel ────────────────────────────────────── */
@@ -1546,18 +1632,15 @@
     };
 
     if (!payload.title) {
-      showToast(t("Please enter an event title."), "error");
-      els.title?.focus();
+      showFieldError(els.title, t("Please enter an event title."));
       return;
     }
     if (!payload.date) {
-      showToast(t("Please select a date."), "error");
-      els.date?.focus();
+      showFieldError(els.date, t("Please select a date."));
       return;
     }
     if (!allDay && !eventTime) {
-      showToast(t("Please set the event time, or mark it as an all-day event."), "error");
-      els.eventTime?.focus();
+      showFieldError(els.eventTime, t("Please set the event time, or mark it as an all-day event."));
       return;
     }
 
@@ -1584,6 +1667,21 @@
   /* ── Delete ──────────────────────────────────────────── */
   // Takes an id now so a swipe can reach an event that is not open in the
   // sheet. The default keeps every existing call site working untouched.
+  function neighbourEventId(eventId) {
+    const ids = [...document.querySelectorAll(".event-card")].map((card) => card.dataset.id);
+    const index = ids.indexOf(String(eventId));
+    if (index === -1) return null;
+    return ids[index + 1] ?? ids[index - 1] ?? null;
+  }
+
+  // The event after the deleted one, or the one before, or the Add button
+  // once the list is empty, and only while the list is what the user sees.
+  function focusAfterDelete(nextId) {
+    if (els.list?.hidden) return;
+    const card = nextId ? document.querySelector(`.event-card[data-id="${CSS.escape(nextId)}"]`) : null;
+    (card || els.openComposerBtn)?.focus?.();
+  }
+
   async function deleteCurrentEvent(eventId = state.detailEventId) {
     const ev = getEventById(eventId);
     if (!ev) return;
@@ -1601,6 +1699,9 @@
     });
     if (!ok) return;
 
+    // The card that had focus is about to disappear: remember its neighbour
+    // now and hand focus there once the list has been drawn again.
+    const nextId = neighbourEventId(ev.id);
     setLoading(true);
     try {
       // ✅ FIX: event_id (was: eventid)
@@ -1608,6 +1709,7 @@
       closeSheets();
       showToast(t("Event deleted."), "success");
       await loadEvents();
+      focusAfterDelete(nextId);
     } catch (error) {
       showToast(normalizeError(error), "error");
     } finally {
@@ -1855,7 +1957,11 @@
     els.closeComposerX?.addEventListener("click", closeSheets);
     els.closeDetailX?.addEventListener("click",   closeSheets);
     els.cancelBtn?.addEventListener("click",      closeSheets);
-    els.sheetOverlay?.addEventListener("click",   closeSheets);
+    // A tap on the dimmed area outside a sheet closes it, as the old overlay
+    // did: each host is full screen, so that tap lands on the host itself.
+    [els.composerHost, els.detailHost].forEach((host) => host?.addEventListener("click", (e) => {
+      if (e.target === host) closeSheets();
+    }));
 
     // Form
     els.eventForm?.addEventListener("submit", submitEventForm);
@@ -1863,6 +1969,10 @@
     els.date?.addEventListener("change", updateRepeatUntilVisibility);
     els.repeat?.addEventListener("change", updateRepeatUntilVisibility);
     els.allDay?.addEventListener("change", updateAllDayVisibility);
+    // A field's error leaves as soon as that field changes.
+    els.allDay?.addEventListener("change", () => clearFieldError(els.eventTime));
+    els.title?.addEventListener("input", () => clearFieldError(els.title));
+    els.eventTime?.addEventListener("input", () => clearFieldError(els.eventTime));
     els.dateJalali?.addEventListener("change", syncGregorianFromJalali);
     els.dateJalali?.addEventListener("blur",   syncGregorianFromJalali);
 
@@ -1880,6 +1990,7 @@
       if (value.trim() === state.searchTerm.trim()) return;
 
       state.searchTerm = value;
+      announceCountNext = true;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => loadEvents(), SEARCH_DEBOUNCE_MS);
     });
@@ -1888,10 +1999,14 @@
     els.filterButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const next = btn.dataset.filter || "all";
-        els.filterButtons.forEach((b) => b.classList.toggle("is-active", b === btn));
+        els.filterButtons.forEach((b) => {
+          b.classList.toggle("is-active", b === btn);
+          b.setAttribute("aria-pressed", String(b === btn));
+        });
         if (next === state.currentFilter) return;
 
         state.currentFilter = next;
+        announceCountNext = true;
         clearTimeout(searchTimer);
         loadEvents();
       });
@@ -1915,16 +2030,8 @@
     els.onboardingSkipBtn?.addEventListener("click", completeOnboarding);
     els.onboardingNextBtn?.addEventListener("click", advanceOnboarding);
 
-    // Keyboard
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        if (closeDatePicker()) return;
-        // An open confirm closes itself on Escape and settles its own
-        // decision; the sheet underneath has to stay where it is.
-        if (els.confirmOverlay?.open) return;
-        if (state.activeSheet) closeSheets();
-      }
-    });
+    // Escape needs no handler here: a native dialog closes itself, and
+    // static/modal.js covers WebViews without <dialog>.
   }
 
   /* ── Onboarding (first run only) ────────────────────── */
@@ -1957,8 +2064,8 @@
     }
     onboardingStep = 0;
     renderOnboardingStep();
-    els.onboardingOverlay.hidden = false;
-    els.onboardingOverlay.setAttribute("aria-hidden", "false");
+    // Escape or a back gesture counts as Skip, so the tour is not shown twice.
+    window.TMModal.open(els.onboardingOverlay, { onClose: rememberOnboardingSeen });
   }
 
   function renderOnboardingStep() {
@@ -1988,10 +2095,10 @@
   }
 
   function completeOnboarding() {
-    if (els.onboardingOverlay) {
-      els.onboardingOverlay.hidden = true;
-      els.onboardingOverlay.setAttribute("aria-hidden", "true");
-    }
+    if (!window.TMModal.close(els.onboardingOverlay)) rememberOnboardingSeen();
+  }
+
+  function rememberOnboardingSeen() {
     try { localStorage.setItem(ONBOARDING_KEY, "1"); } catch (_) {}
   }
 
@@ -2157,34 +2264,27 @@
     els.dpTabs.forEach((tab) => {
       const active = tab.dataset.calendar === dp.calendar;
       tab.classList.toggle("is-active", active);
-      tab.setAttribute("aria-selected", String(active));
+      tab.setAttribute("aria-pressed", String(active));
     });
     if (els.dpClear) els.dpClear.hidden = !allowClear;
 
-    state.lastFocusedElement = document.activeElement;
-
     // Order matters here, and getting it wrong is what made the picker open on
-    // 1900 / January / 1. While the overlay is hidden the wheels have no
+    // 1900 / January / 1. While the dialog is closed the wheels have no
     // scroll box, so the scrollTop that centres today was silently dropped and
     // every column stayed parked on its first item. Show first, fill second.
-    if (els.dpOverlay) {
-      els.dpOverlay.hidden = false;
-      els.dpOverlay.setAttribute("aria-hidden", "false");
-    }
+    // TMModal remembers the opener itself. The picker used to write it into
+    // the one last-focused slot the composer used too, and closing the
+    // composer afterwards sent focus to a hidden date field.
+    window.TMModal.open(els.dpOverlay, { onClose: () => { dp.onPick = null; } });
     dpRender();
-    setTimeout(() => els.dpConfirm?.focus?.(), 40);
   }
 
   function closeDatePicker() {
-    if (!els.dpOverlay || els.dpOverlay.hidden) return false;
-    els.dpOverlay.hidden = true;
-    els.dpOverlay.setAttribute("aria-hidden", "true");
-    dp.onPick = null;
-    state.lastFocusedElement?.focus?.();
-    return true;
+    return window.TMModal.close(els.dpOverlay);
   }
 
   function setEventDate(iso) {
+    clearFieldError(els.date);
     if (els.date) els.date.value = iso;
     if (els.dateJalali) {
       if (!iso) { els.dateJalali.value = ""; return; }
@@ -2201,13 +2301,31 @@
       onPick: setEventDate,
     });
 
-    els.date?.addEventListener("click", openForEventDate("gregorian"));
-    els.dateJalali?.addEventListener("click", openForEventDate("jalali"));
-    els.repeatUntil?.addEventListener("click", () => openDatePicker({
+    const openRepeatUntil = () => openDatePicker({
       value: els.repeatUntil.value,
       allowClear: true,
       onPick: (iso) => { els.repeatUntil.value = iso; },
-    }));
+    });
+
+    // The date fields are readonly and open the picker, so they must open it
+    // from the keyboard too, or a keyboard-only user cannot date an event and
+    // so cannot create one. They behave like buttons: Enter acts on keydown
+    // (and must not submit the form), Space on keyup, so the keyup cannot land
+    // on whatever the picker puts focus on first.
+    [
+      [els.date, openForEventDate("gregorian")],
+      [els.dateJalali, openForEventDate("jalali")],
+      [els.repeatUntil, openRepeatUntil],
+    ].forEach(([field, open]) => {
+      field?.addEventListener("click", open);
+      field?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); open(); }
+        else if (e.key === " ") e.preventDefault();
+      });
+      field?.addEventListener("keyup", (e) => {
+        if (e.key === " ") open();
+      });
+    });
 
     [[els.dpYear, "y"], [els.dpMonth, "m"], [els.dpDay, "d"]].forEach(([el, field]) => {
       el?.addEventListener("scroll", () => dpOnScroll(el, field), { passive: true });
@@ -2232,7 +2350,7 @@
       els.dpTabs.forEach((other) => {
         const active = other === tab;
         other.classList.toggle("is-active", active);
-        other.setAttribute("aria-selected", String(active));
+        other.setAttribute("aria-pressed", String(active));
       });
       dpRender();
     }));
@@ -2259,7 +2377,7 @@
 
     els.dpCancel?.addEventListener("click", closeDatePicker);
     els.dpOverlay?.addEventListener("click", (e) => {
-      if (e.target === els.dpOverlay) closeDatePicker();
+      if (window.TMModal.isBackdropClick(els.dpOverlay, e)) closeDatePicker();
     });
   }
 
@@ -2319,8 +2437,11 @@
       const active = tab.dataset.pane === name;
       tab.classList.toggle("is-active", active);
       tab.setAttribute("aria-selected", String(active));
+      // Only the selected tab is in the Tab order; the arrow keys reach the other.
+      tab.tabIndex = active ? 0 : -1;
     });
-    if (els.detailNote) els.detailNote.hidden = name !== "note";
+    const notePanel = document.getElementById("notePanel");
+    if (notePanel) notePanel.hidden = name !== "note";
 
     const pane = document.getElementById("checklistPane");
     if (pane) pane.hidden = name !== "checklist";
@@ -2414,8 +2535,23 @@
   }
 
   function bindChecklist() {
-    document.querySelectorAll(".pane-tab").forEach((tab) => {
+    const paneTabs = [...document.querySelectorAll(".pane-tab")];
+    paneTabs.forEach((tab, index) => {
       tab.addEventListener("click", () => showPane(tab.dataset.pane));
+      // The tab pattern: the arrows move between tabs and select as they go,
+      // Home and End jump to either end. Right and left swap in Persian.
+      tab.addEventListener("keydown", (e) => {
+        const rtl = document.documentElement.dir === "rtl";
+        const step = { ArrowRight: rtl ? -1 : 1, ArrowLeft: rtl ? 1 : -1 }[e.key];
+        let next = null;
+        if (step) next = paneTabs[(index + step + paneTabs.length) % paneTabs.length];
+        else if (e.key === "Home") next = paneTabs[0];
+        else if (e.key === "End") next = paneTabs[paneTabs.length - 1];
+        if (!next) return;
+        e.preventDefault();
+        showPane(next.dataset.pane);
+        next.focus();
+      });
     });
     document.getElementById("checklistAdd")?.addEventListener("click", addChecklistItem);
     document.getElementById("checklistInput")?.addEventListener("keydown", (e) => {

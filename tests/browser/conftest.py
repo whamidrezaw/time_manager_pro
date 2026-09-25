@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib
 import itertools
 import json
 import os
@@ -34,11 +35,14 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import pytest
+import telegram
 import uvicorn
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
+from app.config import get_settings
 from app.services.auth import compute_telegram_hash
+from app.services.share_group import start_group
 from tests.harness import install_fake_db, seed_event, teardown_fake_db, utc
 
 TELEGRAM_SDK = "https://telegram.org/js/telegram-web-app.js"
@@ -62,10 +66,18 @@ class LiveServer:
     """app.main on a background thread, with an event loop tests can reach."""
 
     def __init__(self) -> None:
-        from app.main import app
-
         self.port = _free_port()
         self.url = f"http://127.0.0.1:{self.port}"
+        # The app builds absolute URLs for share cards and public links from
+        # WEBAPP_BASE_URL. Pointing it at this server is what production does:
+        # one origin serves the page and its images, so img-src 'self' accepts
+        # them. Left as it was, the card preview is refused by the CSP.
+        self._base_url_before = os.environ.get("WEBAPP_BASE_URL")
+        os.environ["WEBAPP_BASE_URL"] = self.url
+        get_settings.cache_clear()
+
+        from app.main import app
+
         self.loop = asyncio.new_event_loop()
         # lifespan off: startup would call Telegram and a real MongoDB.
         config = uvicorn.Config(app, host="127.0.0.1", port=self.port, lifespan="off", log_level="warning")
@@ -91,15 +103,92 @@ class LiveServer:
     def stop(self) -> None:
         self.server.should_exit = True
         self.thread.join(timeout=15)
+        if self._base_url_before is None:
+            os.environ.pop("WEBAPP_BASE_URL", None)
+        else:
+            os.environ["WEBAPP_BASE_URL"] = self._base_url_before
+        get_settings.cache_clear()
+
+
+async def _inviter_name(user_id, settings=None) -> str:
+    """Stands in for Telegram's getChat, the one outside call the join card makes."""
+    return "Ava"
+
+
+# Every module of the web app that talks to Telegram. The live server runs with
+# a stand-in in each; test_harness.py keeps this list complete.
+TELEGRAM_MODULES = (
+    "app.main",
+    "app.routes.events",
+    "app.routes.tasks",
+    "app.routes.telegram",
+    "app.services.health",
+    "app.services.referrals",
+)
+
+
+class FakeTelegramBot:
+    """Stands in for telegram.Bot while the live server runs: no test reaches
+    the network. Batch 20 found saving an event waiting on api.telegram.org
+    with the test token, so a test was as fast as the network happened to be.
+    Messages land in `sent` instead of a chat; any other call does nothing."""
+
+    sent: list[dict] = []
+    delay = 0  # seconds a message takes to go out, for a test that needs a slow Telegram
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def send_message(self, **kwargs):
+        if FakeTelegramBot.delay:
+            await asyncio.sleep(FakeTelegramBot.delay)
+        FakeTelegramBot.sent.append(kwargs)
+
+    def __getattr__(self, name):
+        async def call(*args, **kwargs):
+            return None
+        return call
+
+
+async def _set_limit_override(user_id: str, value) -> None:
+    from app.db import get_database
+
+    overrides = get_database()["limit_overrides"]
+    await overrides.update_one({"_id": user_id}, {"$set": {"value": value}}, upsert=True)
 
 
 @pytest.fixture(scope="module")
 def live_server():
+    import app.routes.sharegroup as sharegroup
+
     install_fake_db()
+    real_name_lookup = sharegroup.get_first_name
+    sharegroup.get_first_name = _inviter_name
+    # Two ways in: modules that imported Bot at the top hold their own name for
+    # it, and imports inside a function (health, referrals) read the package's
+    # at call time. Both are stood in for, and both are put back.
+    real_package_bot = telegram.Bot
+    telegram.Bot = FakeTelegramBot
+    real_bots = {}
+    for name in TELEGRAM_MODULES:
+        module = importlib.import_module(name)
+        if hasattr(module, "Bot"):
+            real_bots[name] = module.Bot
+            module.Bot = FakeTelegramBot
     server = LiveServer()
     server.start()
     yield server
     server.stop()
+    for name, bot in real_bots.items():
+        importlib.import_module(name).Bot = bot
+    telegram.Bot = real_package_bot
+    sharegroup.get_first_name = real_name_lookup
     teardown_fake_db()
 
 
@@ -128,12 +217,13 @@ def signed_init_data(user_id: int, lang: str) -> str:
     return urlencode(fields)
 
 
-def telegram_stub(user_id: int, lang: str, scheme: str, theme: dict | None) -> str:
+def telegram_stub(user_id: int, lang: str, scheme: str, theme: dict | None, start_param: str = "") -> str:
     """Only the surface static/*.js actually touches."""
     return f"""
 window.Telegram = {{ WebApp: {{
   initData: {json.dumps(signed_init_data(user_id, lang))},
-  initDataUnsafe: {{ user: {{ id: {user_id}, first_name: "Test", language_code: {json.dumps(lang)} }} }},
+  initDataUnsafe: {{ user: {{ id: {user_id}, first_name: "Test", language_code: {json.dumps(lang)} }},
+                    start_param: {json.dumps(start_param)} }},
   colorScheme: {json.dumps(scheme)},
   themeParams: {json.dumps(theme or {})},
   version: "8.0", platform: "tdesktop",
@@ -145,8 +235,15 @@ window.Telegram = {{ WebApp: {{
   shareMessage: function (id, done) {{ if (done) done(true); }},
   HapticFeedback: {{ impactOccurred: function () {{}}, notificationOccurred: function () {{}},
                      selectionChanged: function () {{}} }},
-  BackButton: {{ show: function () {{}}, hide: function () {{}}, onClick: function () {{}},
-                 offClick: function () {{}} }},
+  // Handlers are kept so a test can press "back" the way Telegram does.
+  BackButton: {{ show: function () {{}}, hide: function () {{}},
+    onClick: function (handler) {{
+      (window.__tgBackHandlers = window.__tgBackHandlers || []).push(handler);
+    }},
+    offClick: function (handler) {{
+      window.__tgBackHandlers = (window.__tgBackHandlers || [])
+        .filter(function (h) {{ return h !== handler; }});
+    }} }},
   MainButton: {{ show: function () {{}}, hide: function () {{}}, setText: function () {{}},
                  onClick: function () {{}}, offClick: function () {{}} }}
 }} }};
@@ -177,9 +274,25 @@ def open_app(browser, live_server):
     opened: list[tuple[object, bool]] = []
 
     def factory(*, lang="en", scheme="light", theme=None, width=390,
-                onboarding_seen=True, telegram=True):
+                onboarding_seen=True, telegram=True, invite=False, extra_events=0,
+                limit_override=None):
         user_id = next(_users)
         seeded = [live_server.run(seed_event(user_id=str(user_id), **event)) for event in default_events()]
+        for n in range(extra_events):  # fillers, for a user near or at the event limit
+            live_server.run(seed_event(user_id=str(user_id), title=f"Filler {n + 1}",
+                                       date_iso=(date.today() + timedelta(days=60 + n)).isoformat(),
+                                       event_ts_utc=utc(days=60 + n)))
+        if limit_override is not None:  # as the admin's /limit would set it
+            live_server.run(_set_limit_override(str(user_id), limit_override))
+        start_param = ""
+        if invite:
+            # Opened from a friend's ?startapp=s_<token> link to "Book club".
+            owner = str(next(_users))
+            shared = live_server.run(seed_event(
+                user_id=owner, title="Book club", category="general",
+                date_iso=(date.today() + timedelta(days=9)).isoformat(), event_ts_utc=utc(days=9),
+            ))
+            start_param = "s_" + live_server.run(start_group(owner, shared["_id"]))["token"]
 
         context = browser.new_context(
             viewport={"width": width, "height": 844}, color_scheme=scheme, reduced_motion="reduce",
@@ -203,7 +316,7 @@ def open_app(browser, live_server):
         page.on("console", lambda msg: msg.type == "error" and page.console_errors.append(msg.text))
         page.on("pageerror", lambda error: page.page_errors.append(str(error)))
 
-        sdk = telegram_stub(user_id, lang, scheme, theme) if telegram else ""
+        sdk = telegram_stub(user_id, lang, scheme, theme, start_param) if telegram else ""
         page.route(TELEGRAM_SDK, lambda route: route.fulfill(
             status=200, content_type="application/javascript", body=sdk))
 
@@ -235,11 +348,25 @@ def axe_source() -> str:
     return data.decode("utf-8")
 
 
+def reshow_open_dialogs_for_axe(page) -> None:
+    """axe-core's stacking model does not know the browser's top layer: every
+    line of text inside an open modal <dialog> comes back as "overlapped by
+    another element" (naming no element), so a contrast check there would pass
+    without looking. Showing the same dialogs again non-modally leaves their
+    markup and pixels as they are and lets axe measure them. Modality itself is
+    tested elsewhere, in test_a11y_dialogs.py.
+
+    A dialog that is closed and shown again at once is still open when its
+    queued "close" event arrives, so TMModal ignores that event."""
+    page.evaluate("() => document.querySelectorAll('dialog[open]').forEach((d) => { d.close(); d.show(); })")
+
+
 @pytest.fixture
 def axe(axe_source):
     """Returns serious and critical WCAG 2.1 A/AA violations for the page as it is now."""
 
     def run(page) -> list[dict]:
+        reshow_open_dialogs_for_axe(page)
         page.evaluate(axe_source)  # evaluate() is not subject to the page's CSP
         options = {"runOnly": {"type": "tag", "values": AXE_TAGS}, "resultTypes": ["violations"]}
         result = page.evaluate("async (options) => await axe.run(document, options)", options)

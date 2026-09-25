@@ -28,7 +28,10 @@
     "You have reached the highest limit. Thank you!": "به بالاترین سقف رسیده‌اید. ممنون از شما!",
     "{valid} joined": "{valid} نفر پیوسته‌اند",
     "{pending} on the way": "{pending} نفر در راه",
-    "Running out of space": "جا دارد تمام می‌شود",
+    "You've reached your event limit": "به سقف رویدادهایت رسیدی",
+    "Unlimited": "نامحدود",
+    "No limit on your events": "برای رویدادهایت محدودیتی نیست",
+    "Your limit was set for you": "سقف تو به‌طور ویژه تنظیم شده است",
     "You've used {used} of your {limit} events. Invite friends to get more.":
       "{used} از {limit} رویداد شما استفاده شده است. با دعوت دوستان سقف را بالا ببرید.",
     "Invite now": "همین حالا دعوت کن",
@@ -127,15 +130,16 @@
   function buildSheet() {
     if (els.overlay) return;
 
-    var overlay = document.createElement("div");
+    // A native <dialog> on the TMModal stack (static/modal.js), shaped exactly
+    // like the overlay it replaces, so the look and tap-outside-to-close stay.
+    var overlay = document.createElement("dialog");
     overlay.className = "ref-overlay";
-    overlay.hidden = true;
-    overlay.setAttribute("aria-hidden", "true");
+    overlay.setAttribute("aria-labelledby", "refTitle");
     overlay.innerHTML =
-      '<div class="ref-dialog" role="dialog" aria-modal="true" aria-labelledby="refTitle">' +
+      '<div class="ref-dialog">' +
         '<div class="ref-handle" aria-hidden="true"></div>' +
         '<div class="ref-head">' +
-          '<h2 class="ref-title" id="refTitle">' + t("Invite friends") + "</h2>" +
+          '<h2 class="ref-title" id="refTitle" tabindex="-1" autofocus>' + t("Invite friends") + "</h2>" +
           '<button type="button" class="icon-btn ref-close" id="refCloseBtn" aria-label="' +
             t("Close") + '">✕</button>' +
         "</div>" +
@@ -189,15 +193,20 @@
       { step: num(state.step), bonus: num(state.bonus) }
     );
 
-    els.usage.textContent = num(state.used) + " / " + num(state.limit) + " " + t("events used");
-    els.next.textContent = state.at_cap
+    // Set by the admin (Batch 20): unlimited, or a limit invites do not raise.
+    els.usage.textContent = state.unlimited
+      ? num(state.used) + " " + t("events used") + " · " + t("Unlimited")
+      : num(state.used) + " / " + num(state.limit) + " " + t("events used");
+    els.next.textContent = state.unlimited ? t("No limit on your events")
+      : state.source === "custom" ? t("Your limit was set for you")
+      : state.at_cap
       ? t("You have reached the highest limit. Thank you!")
       : t("{n} more to go for +{bonus} events", {
           n: num(state.invites_to_next),
           bonus: num(state.bonus),
         });
 
-    var ratio = state.limit > 0 ? Math.min(state.used / state.limit, 1) : 0;
+    var ratio = state.unlimited ? 0 : state.limit > 0 ? Math.min(state.used / state.limit, 1) : 0;
     els.fill.style.width = (ratio * 100).toFixed(1) + "%";
     els.fill.classList.toggle("is-hot", ratio >= NEAR_LIMIT_RATIO);
 
@@ -213,8 +222,10 @@
     var existing = document.getElementById("refNudge");
     if (!main || !state) return;
 
-    var ratio = state.limit > 0 ? state.used / state.limit : 0;
-    if (state.at_cap || ratio < NEAR_LIMIT_RATIO) {
+    // Only once the limit is reached (Batch 20): below it the list keeps the
+    // room, and at the hard ceiling invites cannot raise it any more.
+    // Nor for a limit the admin set: inviting would not raise it.
+    if (state.unlimited || state.source === "custom" || state.at_cap || state.used < state.limit) {
       if (existing) existing.remove();
       return;
     }
@@ -224,7 +235,7 @@
     card.className = "ref-nudge";
     card.id = "refNudge";
     card.innerHTML =
-      '<div class="ref-nudge-body"><strong>' + t("Running out of space") + "</strong>" +
+      '<div class="ref-nudge-body"><strong>' + t("You've reached your event limit") + "</strong>" +
       "<p>" +
       t("You've used {used} of your {limit} events. Invite friends to get more.", {
         used: num(state.used),
@@ -246,21 +257,31 @@
     haptic();
     buildSheet();
     render();
-    els.overlay.hidden = false;
-    els.overlay.setAttribute("aria-hidden", "false");
+    window.TMModal.open(els.overlay, { requestClose: close, onClose: closed });
     requestAnimationFrame(function () {
       els.overlay.classList.add("is-open");
     });
     refresh();
   }
 
+  var closing = null;
+
+  // Animated: the sheet slides out before it leaves the top layer.
   function close() {
-    if (!els.overlay) return;
+    if (!els.overlay || !window.TMModal.isOpen(els.overlay) || closing) return;
     els.overlay.classList.remove("is-open");
-    els.overlay.setAttribute("aria-hidden", "true");
-    setTimeout(function () {
-      els.overlay.hidden = true;
-    }, 200);
+    closing = setTimeout(closeNow, 200);
+  }
+
+  function closeNow() {
+    clearTimeout(closing);
+    closing = null;
+    if (els.overlay) window.TMModal.close(els.overlay);
+  }
+
+  // However it was closed: its own button, Escape, or Telegram's back button.
+  function closed() {
+    els.overlay.classList.remove("is-open");
   }
 
   function flash(button, text) {

@@ -76,22 +76,22 @@
     <!-- Toolbar -->
     <section class="toolbar" aria-label="Filters and search">
       <div class="toolbar-row" id="filterRow" role="group" aria-label="Category filter">
-        <button type="button" class="seg-btn is-active" data-filter="all">🌐 All</button>
-        <button type="button" class="seg-btn" data-filter="pinned">📌 Pinned</button>
-        <button type="button" class="seg-btn" data-filter="birthday">🎂 Birthday</button>
-        <button type="button" class="seg-btn" data-filter="work">💼 Work</button>
-        <button type="button" class="seg-btn" data-filter="health">❤️ Health</button>
-        <button type="button" class="seg-btn" data-filter="family">👨‍👩‍👧 Family</button>
-        <button type="button" class="seg-btn" data-filter="travel">✈️ Travel</button>
-        <button type="button" class="seg-btn" data-filter="finance">💰 Finance</button>
-        <button type="button" class="seg-btn" data-filter="study">📚 Study</button>
-        <button type="button" class="seg-btn" data-filter="past">🗄️ Past</button>
+        <button type="button" class="seg-btn is-active" data-filter="all" aria-pressed="true">🌐 All</button>
+        <button type="button" class="seg-btn" data-filter="pinned" aria-pressed="false">📌 Pinned</button>
+        <button type="button" class="seg-btn" data-filter="birthday" aria-pressed="false">🎂 Birthday</button>
+        <button type="button" class="seg-btn" data-filter="work" aria-pressed="false">💼 Work</button>
+        <button type="button" class="seg-btn" data-filter="health" aria-pressed="false">❤️ Health</button>
+        <button type="button" class="seg-btn" data-filter="family" aria-pressed="false">👨‍👩‍👧 Family</button>
+        <button type="button" class="seg-btn" data-filter="travel" aria-pressed="false">✈️ Travel</button>
+        <button type="button" class="seg-btn" data-filter="finance" aria-pressed="false">💰 Finance</button>
+        <button type="button" class="seg-btn" data-filter="study" aria-pressed="false">📚 Study</button>
+        <button type="button" class="seg-btn" data-filter="past" aria-pressed="false">🗄️ Past</button>
       </div>
       <label class="search-wrap" for="searchInput">
         <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
-        <input type="search" id="searchInput" class="search-input" placeholder="Search events…" autocomplete="off" inputmode="search">
+        <input type="search" id="searchInput" class="search-input" aria-label="Search events" placeholder="Search events…" autocomplete="off" inputmode="search">
       </label>
     </section>
 
@@ -146,7 +146,10 @@
     </section>
 
     <!-- Events List -->
-    <section id="eventsWrap" class="events-wrap" aria-live="polite" aria-label="Event list"></section>
+    <section id="eventsWrap" class="events-wrap" aria-label="Event list"></section>
+      <!-- Not the list itself: re-announcing every card on each render drowned the
+           reader. Filters and searches say how many events they leave, here. -->
+      <p id="listStatus" class="sr-only" role="status"></p>
 
     <!-- Load More -->
     <div id="loadMoreWrap" class="load-more-wrap" hidden>
@@ -173,15 +176,19 @@
     <span>Add Event</span>
   </button>
 
-  <!-- ── Sheet Overlay ──────────────────────────────── -->
-  <div id="sheetOverlay" class="sheet-overlay" hidden aria-hidden="true"></div>
 
   <!-- ── Composer Sheet ─────────────────────────────── -->
-  <section id="composerSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="composerTitle" aria-hidden="true" hidden>
+  <!-- The composer and the detail page each sit in a native <dialog> host
+       opened through static/modal.js. The host has no size of its own, and
+       its ::backdrop dims the page as #sheetOverlay did; the sheet inside
+       keeps every class, rule and position it had, so neither one looks any
+       different. -->
+  <dialog id="composerHost" class="sheet-host" aria-labelledby="composerTitle">
+  <section id="composerSheet" class="sheet">
     <div class="sheet-handle" aria-hidden="true"></div>
     <div class="sheet-head">
       <div>
-        <h2 id="composerTitle" class="sheet-title">New Event</h2>
+        <h2 id="composerTitle" class="sheet-title" tabindex="-1" autofocus>New Event</h2>
         <p id="composerSubtitle" class="sheet-subtitle">Set title, date and repeat pattern.</p>
       </div>
       <button type="button" id="closeComposerX" class="icon-btn" aria-label="Close form">
@@ -198,6 +205,7 @@
           Event Title
         </label>
         <input type="text" id="title" class="field-input" placeholder="e.g. Mom's Birthday" maxlength="200" autocomplete="off" required>
+        <p class="field-error" id="titleError" hidden></p>
       </div>
 
       <div class="grid-2">
@@ -207,7 +215,8 @@
             Gregorian Date
           </label>
           <input type="text" id="date" class="field-input field-picker" required
-                 readonly inputmode="none" autocomplete="off" placeholder="2026-04-20">
+                 readonly inputmode="none" aria-haspopup="dialog" autocomplete="off" placeholder="2026-04-20">
+          <p class="field-error" id="dateError" hidden></p>
         </div>
         <div class="field-group">
           <label class="field-label" for="date-jalali">
@@ -215,7 +224,7 @@
             Jalali Date
           </label>
           <input type="text" id="date-jalali" class="field-input field-picker" placeholder="1405/01/31"
-                 readonly inputmode="none" autocomplete="off" dir="ltr">
+                 readonly inputmode="none" aria-haspopup="dialog" autocomplete="off" dir="ltr">
         </div>
       </div>
 
@@ -263,7 +272,7 @@
             <span class="field-optional">(optional)</span>
           </label>
           <input type="text" id="repeatUntil" class="field-input field-picker"
-                 readonly inputmode="none" autocomplete="off" placeholder="2026-12-31">
+                 readonly inputmode="none" aria-haspopup="dialog" autocomplete="off" placeholder="2026-12-31">
         </div>
         <div class="field-group">
           <label class="field-label" for="category">
@@ -299,6 +308,7 @@
             Event Time
           </label>
           <input type="time" id="eventTime" class="field-input" value="09:00">
+          <p class="field-error" id="eventTimeError" hidden></p>
         </div>
         <div class="field-group" id="reminderTimeWrap">
           <label class="field-label" for="reminderTime">
@@ -350,14 +360,16 @@
       </div>
     </form>
   </section>
+  </dialog>
 
   <!-- ── Detail Sheet ───────────────────────────────── -->
-  <section id="detailSheet" class="sheet detail-page" role="dialog" aria-modal="true" aria-labelledby="detailTitle" aria-hidden="true" hidden>
+  <dialog id="detailHost" class="sheet-host" aria-labelledby="detailTitle">
+  <section id="detailSheet" class="sheet detail-page">
     <div class="sheet-head">
       <button type="button" id="closeDetailX" class="icon-btn detail-back" aria-label="Close details">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <h2 id="detailTitle" class="sheet-title">Event Details</h2>
+      <h2 id="detailTitle" class="sheet-title" tabindex="-1" autofocus>Event Details</h2>
     </div>
 
     <article class="detail-card">
@@ -422,20 +434,24 @@
       </div>
 
       <div class="field-group">
-        <div class="pane-tabs" role="tablist">
-          <button type="button" class="pane-tab is-active" data-pane="note" role="tab" aria-selected="true">
+        <div class="pane-tabs" role="tablist" aria-label="Note and checklist">
+          <button type="button" class="pane-tab is-active" data-pane="note" role="tab" aria-selected="true"
+                  id="noteTab" aria-controls="notePanel" tabindex="0">
             <span data-i18n>Note</span>
           </button>
-          <button type="button" class="pane-tab" data-pane="checklist" role="tab" aria-selected="false">
+          <button type="button" class="pane-tab" data-pane="checklist" role="tab" aria-selected="false"
+                  id="checklistTab" aria-controls="checklistPane" tabindex="-1">
             <span data-i18n>Checklist</span>
             <span class="pane-count" id="checklistCount" hidden></span>
           </button>
         </div>
-        <textarea id="detailNote" class="field-input field-textarea" rows="6" maxlength="2000" placeholder="Write a note or any details…"></textarea>
-        <div class="checklist" id="checklistPane" hidden>
+        <div class="note-panel" id="notePanel" role="tabpanel" aria-labelledby="noteTab">
+        <textarea id="detailNote" class="field-input field-textarea" rows="6" maxlength="2000" aria-label="Note" placeholder="Write a note or any details…"></textarea>
+        </div>
+        <div class="checklist" id="checklistPane" role="tabpanel" aria-labelledby="checklistTab" hidden>
           <div class="checklist-items" id="checklistItems"></div>
           <div class="checklist-add">
-            <input type="text" id="checklistInput" class="field-input" maxlength="200" placeholder="Add an item" />
+            <input type="text" id="checklistInput" class="field-input" maxlength="200" aria-label="Add an item" placeholder="Add an item" />
             <button type="button" class="btn-primary checklist-add-btn" id="checklistAdd" aria-label="Add item">+</button>
           </div>
         </div>
@@ -447,56 +463,57 @@
       </div>
     </article>
   </section>
+  </dialog>
 
   <!-- ── First-run Onboarding ──────────────────────── -->
-  <div id="onboardingOverlay" class="confirm-overlay onboarding-overlay" hidden aria-hidden="true">
-    <div class="confirm-dialog onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
-      <div class="confirm-icon" id="onboardingIcon">🗓️</div>
-      <h3 id="onboardingTitle" class="confirm-title">Never miss what matters</h3>
-      <p id="onboardingText" class="confirm-text">Add birthdays, appointments, and anything else you want to remember — TimeManager Pro keeps track so you don't have to.</p>
-      <div class="onboarding-dots" id="onboardingDots" aria-hidden="true">
-        <span class="is-active"></span><span></span><span></span>
-      </div>
-      <div class="confirm-actions onboarding-actions">
-        <button type="button" id="onboardingSkipBtn" class="btn-secondary">Skip</button>
-        <button type="button" id="onboardingNextBtn" class="btn-primary">Next</button>
+  <dialog id="onboardingOverlay" class="confirm-dialog onboarding-dialog"
+          aria-labelledby="onboardingTitle" aria-describedby="onboardingText">
+    <div class="confirm-icon" id="onboardingIcon" aria-hidden="true">🗓️</div>
+    <h3 id="onboardingTitle" class="confirm-title" tabindex="-1" autofocus>Never miss what matters</h3>
+    <p id="onboardingText" class="confirm-text">Add birthdays, appointments, and anything else you want to remember — TimeManager Pro keeps track so you don't have to.</p>
+    <div class="onboarding-dots" id="onboardingDots" aria-hidden="true">
+      <span class="is-active"></span><span></span><span></span>
+    </div>
+    <div class="confirm-actions onboarding-actions">
+      <button type="button" id="onboardingSkipBtn" class="btn-secondary">Skip</button>
+      <button type="button" id="onboardingNextBtn" class="btn-primary">Next</button>
+    </div>
+  </dialog>
+
+  <!-- Date picker. Its own dialog rather than part of a sheet, because it
+       opens on top of the composer sheet that contains the fields. -->
+  <dialog id="dpOverlay" class="dp-dialog" aria-labelledby="dpTitle">
+    <div class="sheet-handle" aria-hidden="true"></div>
+
+    <div class="dp-head">
+      <h2 class="sheet-title" id="dpTitle" tabindex="-1" autofocus>Pick a date</h2>
+      <!-- Toggle buttons, not tabs: both switch the same wheels, and there is
+           no panel of their own for a tab to control. -->
+      <div class="dp-tabs" role="group" aria-label="Calendar">
+        <button type="button" class="dp-tab is-active" data-calendar="gregorian" aria-pressed="true">Gregorian</button>
+        <button type="button" class="dp-tab" data-calendar="jalali" aria-pressed="false">Jalali</button>
       </div>
     </div>
-  </div>
+
+    <div class="dp-wheels" id="dpWheels">
+      <div class="dp-wheel" id="dpYear"  role="listbox" aria-label="Year" tabindex="0"></div>
+      <div class="dp-wheel" id="dpMonth" role="listbox" aria-label="Month" tabindex="0"></div>
+      <div class="dp-wheel" id="dpDay"   role="listbox" aria-label="Day" tabindex="0"></div>
+      <div class="dp-highlight" aria-hidden="true"></div>
+    </div>
+
+    <p class="dp-preview" id="dpPreview" aria-live="polite"></p>
+
+    <div class="dp-actions">
+      <button type="button" class="btn-secondary" id="dpToday">Today</button>
+      <button type="button" class="btn-secondary" id="dpClear" hidden>Clear</button>
+      <button type="button" class="btn-secondary" id="dpCancel">Cancel</button>
+      <button type="button" class="btn-primary" id="dpConfirm">Confirm</button>
+    </div>
+  </dialog>
+
 
   <!-- ── Custom Confirm Dialog ──────────────────────── -->
-  <!-- Date picker. Its own overlay rather than a sheet, because it opens on
-       top of the composer sheet that contains the fields. -->
-  <div id="dpOverlay" class="dp-overlay" hidden aria-hidden="true">
-    <div class="dp-dialog" role="dialog" aria-modal="true" aria-labelledby="dpTitle">
-      <div class="sheet-handle" aria-hidden="true"></div>
-
-      <div class="dp-head">
-        <h2 class="sheet-title" id="dpTitle">Pick a date</h2>
-        <div class="dp-tabs" role="tablist" aria-label="Calendar">
-          <button type="button" class="dp-tab is-active" data-calendar="gregorian" role="tab" aria-selected="true">Gregorian</button>
-          <button type="button" class="dp-tab" data-calendar="jalali" role="tab" aria-selected="false">Jalali</button>
-        </div>
-      </div>
-
-      <div class="dp-wheels" id="dpWheels">
-        <div class="dp-wheel" id="dpYear"  role="listbox" aria-label="Year" tabindex="0"></div>
-        <div class="dp-wheel" id="dpMonth" role="listbox" aria-label="Month" tabindex="0"></div>
-        <div class="dp-wheel" id="dpDay"   role="listbox" aria-label="Day" tabindex="0"></div>
-        <div class="dp-highlight" aria-hidden="true"></div>
-      </div>
-
-      <p class="dp-preview" id="dpPreview" aria-live="polite"></p>
-
-      <div class="dp-actions">
-        <button type="button" class="btn-secondary" id="dpToday">Today</button>
-        <button type="button" class="btn-secondary" id="dpClear" hidden>Clear</button>
-        <button type="button" class="btn-secondary" id="dpCancel">Cancel</button>
-        <button type="button" class="btn-primary" id="dpConfirm">Confirm</button>
-      </div>
-    </div>
-  </div>
-
   <!-- A native <dialog>: showModal() gives it focus, an inert page behind it
        and Escape. The id is the old overlay's, so nothing else had to change. -->
   <dialog id="confirmOverlay" class="confirm-dialog" role="alertdialog"
@@ -513,6 +530,7 @@
   <!-- ── Toast ─────────────────────────────────────── -->
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
+  <script src="/static/modal.js?v={{ asset_version }}" defer></script>
   <script src="/static/app.js?v={{ asset_version }}" defer></script>
   <script src="/static/referral.js?v={{ asset_version }}" defer></script>
   <script src="/static/share.js?v={{ asset_version }}" defer></script>

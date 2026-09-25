@@ -17,7 +17,7 @@ from app.services.auth import (
     check_public_rate_limit,
     validate_init_data,
 )
-from app.services.cards import FontsMissing, fonts_available, render_event_card
+from app.services.cards import FontsMissing, countdown_words, fonts_available, render_event_card
 from app.services.reminders import event_language
 from app.services.sharing import (
     card_url,
@@ -162,6 +162,7 @@ async def public_countdown(request: Request, token: str):
 
     settings = get_settings()
     language = event_language(event)
+    title = str(event.get("title", ""))
 
     return templates.TemplateResponse(
         request,
@@ -172,7 +173,9 @@ async def public_countdown(request: Request, token: str):
             "asset_version": ASSET_VERSION,
             "lang": language,
             "direction": "rtl" if language == "fa" else "ltr",
-            "title": str(event.get("title", "")),
+            "title": title,
+            # What the image says, for anyone who cannot see it (A11Y-07).
+            "card_alt": f"{title} — {countdown_words(event, language)}",
             "card_url": card_url(token, settings),
             "page_url": public_url(token, settings),
             "miniapp_url": miniapp_url(token, settings),
