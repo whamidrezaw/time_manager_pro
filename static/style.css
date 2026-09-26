@@ -64,7 +64,7 @@
   --brand-grad: linear-gradient(135deg, #5b6cf8 0%, #8b5cf6 100%);
   --brand-soft: rgba(91, 108, 248, 0.12);
   --brand-text: #ffffff;
-  --brand-ink: var(--brand);
+  --brand-ink: #4053f7;  /* text: a hair darker than the fill, for tinted boxes */
 
   /* Surfaces — Telegram first, original palette as fallback */
   --bg: var(--tg-bg, #f0f2ff);
@@ -238,7 +238,7 @@
   --text: var(--tg-text, #1a1d3a);
   --text-2: var(--tg-text-2, #4a4e78);
   --text-muted: var(--tg-text-muted, #606aa0);
-  --brand-ink: var(--brand);
+  --brand-ink: #4053f7;
   --shadow-card: 0 2px 8px rgba(26, 29, 58, 0.06), 0 0 0 1px var(--border);
 }
 

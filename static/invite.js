@@ -82,7 +82,7 @@
     overlay.innerHTML =
       '<div class="invite-card">' +
         (invite.card_url
-          ? '<img class="invite-image" alt="" src="' + invite.card_url + '" />'
+          ? '<img class="invite-image" alt="" />'
           : "") +
         '<span class="invite-tag">' + t("Shared event") + "</span>" +
         '<p class="invite-who"></p>' +
@@ -109,6 +109,13 @@
     });
     requestAnimationFrame(function () { overlay.classList.add("is-open"); });
 
+    var image = overlay.querySelector(".invite-image");
+    if (image) {
+      // Named, and loaded from this page's own origin (see share.js).
+      var own = new URL(invite.card_url, location.href);
+      image.alt = invite.card_alt || "";
+      image.src = own.pathname + own.search;
+    }
     overlay.querySelector("#inviteNo").addEventListener("click", function () {
       close(overlay);
     });
@@ -130,7 +137,9 @@
         // goes to the event that was just added.
         var card = result.id && document.querySelector('.event-card[data-id="' + CSS.escape(result.id) + '"]');
         if (card) card.focus();
-        if (result.already_joined) alert(t("You already have this one."));
+        // In the app's own status line, which a screen reader hears; an
+        // alert() may never show in a Telegram WebView.
+        if (result.already_joined && window.TMToast) window.TMToast(t("You already have this one."), "info");
       } catch (error) {
         var code = String(error.message || "");
         problem.textContent =

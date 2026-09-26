@@ -11,6 +11,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.config import Settings, get_settings
 from app.db import get_events_collection
+from app.services.cards import card_alt
 
 logger = logging.getLogger("tm_pro.sharing")
 
@@ -86,6 +87,7 @@ def describe(event: dict, settings: Settings | None = None) -> dict:
         "token": token,
         "public_url": public_url(token, settings) if token else None,
         "card_url": card_url(token, settings) if token else None,
+        "card_alt": card_alt(event) if token else None,
         "miniapp_url": miniapp_url(token, settings) if token else None,
     }
 
@@ -152,7 +154,8 @@ async def set_share_state(user_id: str, event_id: str, enabled: bool,
         raise HTTPException(status_code=500, detail="TOKEN_ALLOCATION_FAILED")
 
     logger.info("sharing enabled user_id=%s event_id=%s", user_id, event["_id"])
-    return describe({"public_enabled": True, "public_token": token}, settings)
+    # The whole event, so the share state can name the card by its title and date.
+    return describe({**event, "public_enabled": True, "public_token": token}, settings)
 
 
 async def get_public_event(token: str) -> dict | None:

@@ -2562,6 +2562,7 @@
      into the detail sheet, the loaded events, and the Jalali conversion. The
      last one matters most — a second date conversion in another file is how
      two parts of the same app start disagreeing about what day it is. */
+  window.TMToast = showToast;  // for share.js and invite.js
   window.TMApp = {
     openDetail,
     getEvent: getEventById,

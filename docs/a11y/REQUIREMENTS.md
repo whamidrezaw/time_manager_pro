@@ -63,26 +63,7 @@ validation errors shown while the composer is open would never be announced.
 
 ## Found along the way (not fixed yet)
 
-- **Share card and the CSP.** The preview is loaded from `WEBAPP_BASE_URL`,
-  not from the origin serving the page. Today both are the same; if a custom
-  domain ever makes them differ, `img-src 'self'` refuses the preview. Use a
-  relative URL, or add that origin to `img-src`.
-- **Card images have `alt=""`.** In the share sheet and on the join card, the
-  title and countdown inside the image never reach a screen reader (A11Y-07).
-- **`alert()` after joining an event you already have.** The code notes that
-  `window.confirm` fails in the Telegram WebView; `alert` is at the same risk.
-  A message in the status region would do.
-- **No axe states for the smaller dialogs.** The axe checks cover the list,
-  the composer, the detail page and the month. Confirm, onboarding, picker,
-  day sheet, share, invite friends and the join card belong in A11Y-05.
-
-## Still manual (not automatable)
-
-- VoiceOver in Telegram iOS and TalkBack in Telegram Android.
-- A keyboard-only pass in Telegram Desktop.
-- Contrast under a few real Telegram themes.
-
-Record the results in the pull request.
+None open.
 
 ## Settled along the way
 
@@ -95,3 +76,14 @@ Record the results in the pull request.
 - **Saving an event waited for Telegram.** `/api/add` sent its confirmation
   message before it answered, so a slow Telegram held the composer open. Fixed
   in Batch 20, step 11 (decision S1): the message goes out after the answer.
+- **Share card and the CSP; card pictures with `alt=""`.** The share sheet and
+  the join card loaded the picture from `WEBAPP_BASE_URL`, which the CSP refuses
+  when that is not the page's own address, and gave it no name. Fixed in Batch
+  22: the same card from the page's own origin, named by its title and
+  countdown, from the one `card_alt` the public page uses.
+- **`alert()` after joining an event you already have.** Now the app's own
+  status line says it, which a screen reader hears.
+- **No axe checks for the smaller dialogs.** All seven now have them, light and
+  dark. They found two more: the public-link switch had no name, and the brand
+  text on the invite sheet's tinted box read at 4.49:1 (`--brand-ink` now has a
+  light value of its own, `#4053f7`, 4.6:1 or better on every tint).

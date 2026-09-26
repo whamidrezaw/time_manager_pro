@@ -93,10 +93,11 @@
         '<div class="shr-preview" id="shrPreview"><div class="shr-skeleton"></div></div>' +
         '<div class="shr-toggle-row">' +
           '<div class="shr-toggle-copy">' +
-            "<strong>" + t("Public link") + "</strong>" +
-            "<p>" + t("Anyone with the link can see this event's title and date.") + "</p>" +
+            '<strong id="shrSwitchLabel">' + t("Public link") + "</strong>" +
+            '<p id="shrSwitchHint">' + t("Anyone with the link can see this event's title and date.") + "</p>" +
           "</div>" +
           '<button type="button" class="shr-switch" id="shrSwitch" role="switch" ' +
+            'aria-labelledby="shrSwitchLabel" aria-describedby="shrSwitchHint" ' +
             'aria-checked="false"><span class="shr-knob"></span></button>' +
         "</div>" +
         '<p class="shr-hint" id="shrHint"></p>' +
@@ -186,8 +187,14 @@
     if (on && state.card_url) {
       // Cache-busted per open so the day count in the picture is never the
       // one from yesterday's visit.
-      els.preview.innerHTML =
-        '<img alt="" src="' + state.card_url + "?t=" + Date.now() + '" />';
+      // Named, and loaded from this page's own origin: WEBAPP_BASE_URL may not
+      // be it, and the CSP only lets a page show images from its own.
+      var own = new URL(state.card_url, location.href);
+      var image = document.createElement("img");
+      image.alt = state.card_alt || "";
+      image.src = own.pathname + (own.search ? own.search + "&" : "?") + "t=" + Date.now();
+      els.preview.textContent = "";
+      els.preview.appendChild(image);
     } else {
       els.preview.innerHTML = '<div class="shr-skeleton"></div>';
     }
