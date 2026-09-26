@@ -52,21 +52,20 @@
   <!-- ── Main Content ───────────────────────────────── -->
   <main id="eventList" class="app-main">
 
-    <!-- Hero Card -->
+    <!-- Hero Card, compact since Batch 21: its heading and both statistics,
+         so the list starts in the top 40 % of a phone screen. -->
     <section class="hero-card">
       <div class="hero-left">
-        <div class="hero-badge">✨ Your Personal Planner</div>
         <h1 class="hero-title">Stay on top of every moment</h1>
-        <p class="hero-text">Save events, birthdays & tasks — get reminders directly in Telegram.</p>
       </div>
       <div class="hero-stats">
         <div class="stat-box">
-          <span class="stat-icon">📅</span>
+          <span class="stat-icon" aria-hidden="true">📅</span>
           <strong id="eventCount" class="stat-value">0</strong>
           <span class="stat-label">Events</span>
         </div>
         <div class="stat-box">
-          <span class="stat-icon">🔔</span>
+          <span class="stat-icon" aria-hidden="true">🔔</span>
           <strong id="syncStatus" class="stat-value">Ready</strong>
           <span class="stat-label">Status</span>
         </div>
