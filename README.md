@@ -207,8 +207,9 @@ limiting, date and recurrence maths, the event API, and the webhook.
 
 Production is one Render web service running native Python: build
 `pip install -r requirements.txt`, start
-`gunicorn -k uvicorn.workers.UvicornWorker app.main:app`, deployed on every
-commit to the service's branch. Reminders are sent by
+`gunicorn -k uvicorn_worker.UvicornWorker app.main:app` (Render's Start
+Command must say exactly this; ADR 0013), deployed on every commit to the
+service's branch. Reminders are sent by
 `POST /tasks/run-reminders`, called every minute by an external cron with the
 `X-Tasks-Secret` header (ADR 0005). `.github/workflows/reminder.yml` runs the
 same pass on GitHub's schedule as a slower fallback, with a healthchecks.io
