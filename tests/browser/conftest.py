@@ -43,6 +43,7 @@ from playwright.sync_api import sync_playwright
 from app.config import get_settings
 from app.services.auth import compute_telegram_hash
 from app.services.share_group import start_group
+from app.services.sharing import generate_public_token
 from tests.harness import install_fake_db, seed_event, teardown_fake_db, utc
 
 TELEGRAM_SDK = "https://telegram.org/js/telegram-web-app.js"
@@ -80,7 +81,10 @@ class LiveServer:
 
         self.loop = asyncio.new_event_loop()
         # lifespan off: startup would call Telegram and a real MongoDB.
-        config = uvicorn.Config(app, host="127.0.0.1", port=self.port, lifespan="off", log_level="warning")
+        # ws="none": the app has no WebSockets, and loading uvicorn's support for
+        # them brought two deprecation warnings into every browser run.
+        config = uvicorn.Config(app, host="127.0.0.1", port=self.port, lifespan="off",
+                                log_level="warning", ws="none")
         self.server = uvicorn.Server(config)
         self.thread = threading.Thread(target=self._serve, name="a11y-live-server", daemon=True)
 
@@ -275,7 +279,7 @@ def open_app(browser, live_server):
 
     def factory(*, lang="en", scheme="light", theme=None, width=390,
                 onboarding_seen=True, telegram=True, invite=False, extra_events=0,
-                limit_override=None):
+                limit_override=None, invite_card=False):
         user_id = next(_users)
         seeded = [live_server.run(seed_event(user_id=str(user_id), **event)) for event in default_events()]
         for n in range(extra_events):  # fillers, for a user near or at the event limit
@@ -288,9 +292,11 @@ def open_app(browser, live_server):
         if invite:
             # Opened from a friend's ?startapp=s_<token> link to "Book club".
             owner = str(next(_users))
+            # invite_card: the friend's event is public, so the join card shows its picture.
+            public = {"public_enabled": True, "public_token": generate_public_token()} if invite_card else {}
             shared = live_server.run(seed_event(
                 user_id=owner, title="Book club", category="general",
-                date_iso=(date.today() + timedelta(days=9)).isoformat(), event_ts_utc=utc(days=9),
+                date_iso=(date.today() + timedelta(days=9)).isoformat(), event_ts_utc=utc(days=9), **public,
             ))
             start_param = "s_" + live_server.run(start_group(owner, shared["_id"]))["token"]
 

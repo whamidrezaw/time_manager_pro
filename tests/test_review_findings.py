@@ -845,17 +845,19 @@ def test_memory_rate_limit_store_stays_bounded():
 
 # ── MAJOR 19 — no security headers at all ──────────────────────────────────
 
-def _client():
-    from fastapi.testclient import TestClient
+async def test_security_headers_are_set():
+    """Checked on a real response through the app, not on the constants.
+
+    Over https, where HSTS is sent, through httpx's ASGI transport: Starlette's
+    TestClient brought two deprecation warnings into every run (Batch 22).
+    """
+    from httpx import ASGITransport, AsyncClient
 
     import app.main as main_module
 
-    return TestClient(main_module.app, base_url="https://testserver")
-
-
-def test_security_headers_are_set():
-    """Checked on a real response through the app, not on the constants."""
-    response = _client().get("/health")
+    transport = ASGITransport(app=main_module.app)
+    async with AsyncClient(transport=transport, base_url="https://testserver") as client:
+        response = await client.get("/health")
 
     assert response.headers.get("X-Content-Type-Options") == "nosniff"
     assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"

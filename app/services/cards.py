@@ -181,6 +181,15 @@ def countdown_words(event: dict, language: str = "en") -> str:
     return f"{headline} {unit}".strip()
 
 
+def card_alt(event: dict) -> str:
+    """The alt text of an event's card picture: its title and its countdown in
+    the card's own words. One source for the public page, the share sheet and
+    the join card, so the text always says what the picture shows."""
+    from app.services.reminders import event_language  # reminders imports this module
+
+    return f"{event.get('title', '')} — {countdown_words(event, event_language(event))}"
+
+
 def render_event_card(event: dict, language: str = "en") -> bytes:
     """A square PNG of one event, ready to be posted into a chat."""
     rtl = language == "fa"

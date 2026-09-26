@@ -86,6 +86,12 @@ def utc(**kwargs) -> datetime:
 
 async def seed_event(**overrides) -> dict:
     """One pending, due, one-off event belonging to user '1001'."""
+    # A test that moves the day gets the Jalali date of that day, not the
+    # default's (Batch 22: cards read 2026-09-27 beside 1405/06/29).
+    if "date_iso" in overrides and "date_jalali" not in overrides:
+        from app.utils.dates import to_jalali
+
+        overrides["date_jalali"] = to_jalali(overrides["date_iso"])
     document = {
         "user_id": "1001",
         "title": "Dentist",

@@ -26,3 +26,7 @@ python_functions = ["test_*"]
 # pytest -m "not browser". CI always runs them.
 markers = ["browser: real Chromium through Playwright and axe-core (tests/browser)"]
 addopts = "-q"
+# A deprecation is a migration waiting to happen; with every dependency
+# pinned, a new one can only arrive with a deliberate upgrade, which then has
+# to deal with it in the same change (Batch 22: the suite had four).
+filterwarnings = ["error::DeprecationWarning", "error::PendingDeprecationWarning"]

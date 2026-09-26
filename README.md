@@ -195,6 +195,14 @@ pytest
 The suite covers the HMAC verification path, timestamp validation, rate
 limiting, date and recurrence maths, the event API, and the webhook.
 
+## Documentation
+
+- `CONSTRAINTS.md`: the quality bar, with its numbers and decisions
+- `docs/DEFINITION_OF_DONE.md`: what every change has to meet
+- `docs/adr/`: the architecture decisions, and why
+- `docs/DEBUGGING.md`: finding a problem in production
+- `docs/a11y/REQUIREMENTS.md`: the accessibility requirements and their tests
+
 ## Deployment
 
 The `Dockerfile` builds the reminder worker; `fly.toml` deploys it to Fly.io.
