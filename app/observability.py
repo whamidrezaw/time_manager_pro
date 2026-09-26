@@ -9,6 +9,8 @@ are read from those, with no metrics server to keep.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import re
@@ -16,12 +18,60 @@ import time
 import uuid
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from functools import lru_cache
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 request_logger = logging.getLogger("tm_pro.request")
 
 _VALID_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
 _STANDARD = set(vars(logging.LogRecord("", 0, "", 0, "", None, None))) | {"message", "asctime"}
+
+
+# A Telegram user or chat id among a log call's arguments (ADR 0018): six or
+# more digits, negative for groups. Counts, durations and event ids are shorter
+# or not all digits, so they pass through as they are.
+_TELEGRAM_ID = re.compile(r"-?\d{6,}")
+
+
+@lru_cache(maxsize=4)
+def _pseudonym_key(bot_token: str) -> bytes:
+    return hmac.new(b"tm_pro log pseudonyms", bot_token.encode(), hashlib.sha256).digest()
+
+
+def pseudonym(value) -> str:
+    """How a Telegram id appears in the logs. Keyed with a secret derived from
+    the bot token: an id is a number of about ten digits, so a plain hash of it
+    is reversed by hashing every candidate. /logid gives the admin the same."""
+    from app.config import get_settings
+
+    key = _pseudonym_key(get_settings().bot_token or "")
+    return "u:" + hmac.new(key, str(value).strip().encode(), hashlib.sha256).hexdigest()[:12]
+
+
+def _looks_like_id(value) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return abs(value) >= 100_000
+    return isinstance(value, str) and _TELEGRAM_ID.fullmatch(value.strip()) is not None
+
+
+def _private(value):
+    return pseudonym(value) if _looks_like_id(value) else value
+
+
+_BASE_RECORD_FACTORY = logging.getLogRecordFactory()
+
+
+def _record_factory(*args, **kwargs):
+    """Every log record is made here, before any handler sees it, so no output,
+    a test's capture included, can get an id that was not replaced."""
+    record = _BASE_RECORD_FACTORY(*args, **kwargs)
+    if isinstance(record.args, tuple):
+        record.args = tuple(_private(value) for value in record.args)
+    elif isinstance(record.args, dict):
+        record.args = {key: _private(value) for key, value in record.args.items()}
+    return record
 
 
 class _RequestId(logging.Filter):
@@ -59,6 +109,8 @@ class JsonFormatter(logging.Formatter):
 
 def configure_logging(settings) -> None:
     """JSON lines by default; LOG_FORMAT=text keeps them readable on a laptop."""
+    if logging.getLogRecordFactory() is not _record_factory:
+        logging.setLogRecordFactory(_record_factory)  # ids become pseudonyms (ADR 0018)
     handler = logging.StreamHandler()
     handler.addFilter(_RequestId())
     if str(getattr(settings, "log_format", "json")).lower() == "text":

@@ -24,7 +24,7 @@ logger = logging.getLogger("tm_pro.admin")
 
 UNLIMITED = "unlimited"
 DEFAULT = "default"
-ADMIN_COMMANDS = frozenset({"/limits", "/limit", "/setbase", "/setbonus", "/setstep"})
+ADMIN_COMMANDS = frozenset({"/limits", "/limit", "/setbase", "/setbonus", "/setstep", "/logid"})
 # command -> (settings field, smallest value it takes)
 RUNTIME = {
     "/setbase": ("event_limit_base", 1),
@@ -119,6 +119,16 @@ def _number(text: str, lowest: int, highest: int) -> int | None:
     return value if lowest <= value <= highest else None
 
 
+async def _log_id(args: list[str]) -> str:
+    """/logid <id or @username>: the pseudonym a user has in the logs (ADR 0018)."""
+    from app.observability import pseudonym
+
+    user_id = await resolve_user(args[0]) if args else None
+    if not user_id:
+        return "Usage: /logid <id or @username>. A username is known once that user has used the bot."
+    return f"In Render's logs this user appears as {pseudonym(user_id)}."
+
+
 async def handle_admin_command(text: str, admin_id: str, settings: Settings | None = None) -> str:
     """One admin command in, one reply out. The caller has checked is_admin."""
     settings = settings or get_settings()
@@ -127,6 +137,8 @@ async def handle_admin_command(text: str, admin_id: str, settings: Settings | No
     args = parts[1:]
     if command == "/limits":
         return await _show_limits(settings)
+    if command == "/logid":
+        return await _log_id(args)
     if command == "/limit":
         return await _limit(args, admin_id, settings)
     if command in RUNTIME:

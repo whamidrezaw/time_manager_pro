@@ -61,6 +61,12 @@ Render's logs have the traceback.
 2. The cron service: is the job on, and what did its last calls return?
 3. `TASKS_SECRET` must be the same on Render and in the cron job.
 
+## Finding one user's lines
+
+Logs name no one: user and chat ids appear as pseudonyms such as `u:3fa9c01b7d2e`
+(ADR 0018). Send the bot `/logid <id or @username>` and search Render's logs
+for the pseudonym it answers with.
+
 ## Rolling back
 
 Render, the service, Events: redeploy the last good deploy. Or revert the merge

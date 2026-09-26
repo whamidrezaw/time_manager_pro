@@ -292,8 +292,8 @@ async def add_event_for_user(
     users_coll = get_users_collection()
 
     logger.info(
-        "add_event user_id=%s title=%r date=%s tz=%s",
-        user_id, payload.title, payload.date, payload.timezone,
+        # Never the title or the date: they are what the user wrote (ADR 0018).
+        "add_event user_id=%s tz=%s", user_id, payload.timezone,
     )
 
     # Imported here rather than at module scope to keep this module's
