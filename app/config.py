@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # Anonymous traffic on the public share pages, counted per client IP.
     # Its own budget because it shares nothing with a signed-in user's.
     rate_limit_public_count: int = Field(default=60, alias="RATE_LIMIT_PUBLIC_COUNT")
+    # Unauthenticated requests are bounded (Batch 27, M1; SECURITY.md)
+    max_request_bytes: int = Field(default=65536, alias="MAX_REQUEST_BYTES")
+    # failed authentications per minute: per address, and in total
+    rate_limit_auth_fail_count: int = Field(default=30, alias="RATE_LIMIT_AUTH_FAIL_COUNT")
+    rate_limit_auth_fail_global: int = Field(default=300, alias="RATE_LIMIT_AUTH_FAIL_GLOBAL")
 
     # Overrides app/middleware.py's derived policy. Set it to an empty string
     # to send no CSP at all: the escape hatch exists because a policy that is

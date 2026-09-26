@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import logging
 
+from fastapi import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 logger = logging.getLogger("tm_pro.middleware")
 
@@ -52,6 +53,8 @@ BASE_HEADERS = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Permitted-Cross-Domain-Policies": "none",
     "Cross-Origin-Resource-Policy": "same-site",
+    # The app uses none of these; a script that got in could not either (Batch 27, L2).
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
 }
 
 # Only meaningful over TLS, and actively harmful on a local http:// run because
@@ -87,3 +90,53 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers.setdefault("Strict-Transport-Security", HSTS)
 
         return response
+
+
+def effective_csp(settings) -> str:
+    """The policy to send. An override from CONTENT_SECURITY_POLICY replaces the
+    strict default, so it is logged at start-up rather than left silent (L3)."""
+    override = getattr(settings, "content_security_policy", None)
+    if override is None:
+        return CSP
+    detail = "switches the CSP off" if not override.strip() else f"replaces the default: {override}"
+    logger.warning("CONTENT_SECURITY_POLICY %s", detail, extra={"event": "csp_override"})
+    return override
+
+
+class _TooLarge(HTTPException):
+    def __init__(self) -> None:
+        super().__init__(status_code=413, detail="TOO_LARGE")
+
+
+class BodySizeLimitMiddleware:
+    """Refuses a request body over max_bytes before it is read whole (M1).
+
+    A Content-Length over the limit is answered at once. Otherwise the bytes are
+    counted as they arrive, so a streamed body without that header stops at the
+    limit too: the endpoint's read fails with a 413, which FastAPI passes on.
+    """
+
+    def __init__(self, app, max_bytes: int = 65536):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        declared = dict(scope.get("headers") or []).get(b"content-length", b"")
+        if declared.isdigit() and int(declared) > self.max_bytes:
+            await JSONResponse({"detail": "TOO_LARGE"}, status_code=413)(scope, receive, send)
+            return
+        seen = 0
+
+        async def counted():
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > self.max_bytes:
+                    raise _TooLarge()
+            return message
+
+        await self.app(scope, counted, send)

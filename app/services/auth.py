@@ -34,6 +34,10 @@ WRITE_SCOPE = "write"
 # by a Telegram user id. Its own scope so a flood of strangers can never spend
 # a signed-in user's budget.
 PUBLIC_SCOPE = "public"
+# Failed authentication, per address and in total (Batch 27, M1): the address
+# can be forged, so the total is what holds against invented ones.
+AUTH_FAIL_SCOPE = "authfail"
+AUTH_FAIL_ALL_SCOPE = "authfail_all"
 
 # The fallback store keeps one key per identity. With user ids that grows with
 # the user base; with IP keys it grows with the internet, so it needs a ceiling.
@@ -45,6 +49,10 @@ def scope_limit(scope: str, settings: Settings) -> int:
         return settings.rate_limit_read_count
     if scope == PUBLIC_SCOPE:
         return settings.rate_limit_public_count
+    if scope == AUTH_FAIL_SCOPE:
+        return settings.rate_limit_auth_fail_count
+    if scope == AUTH_FAIL_ALL_SCOPE:
+        return settings.rate_limit_auth_fail_global
     return settings.rate_limit_count
 
 
@@ -242,6 +250,14 @@ def validate_auth_date(
         raise HTTPException(status_code=403, detail="INVALID_AUTH_DATE")
 
 
+def _count_failed_authentication(request, settings: Settings) -> None:
+    """Every refused initData costs a parse, a hash and a log line. Counted per
+    address and in total, in memory, so a flood cannot move to the database; a
+    real user never fails, so the total never stands in anyone's way."""
+    _check_rate_limit_memory(client_ip(request), settings, AUTH_FAIL_SCOPE)
+    _check_rate_limit_memory("*", settings, AUTH_FAIL_ALL_SCOPE)
+
+
 async def validate_init_data(
     request: Request,
     init_data: str,
@@ -253,40 +269,45 @@ async def validate_init_data(
     if not settings.bot_token:
         raise HTTPException(status_code=500, detail="MISCONFIGURED")
 
-    parsed = parse_init_data(init_data)
+    try:
+        parsed = parse_init_data(init_data)
 
-    received_hash = parsed.get("hash")
-    if not received_hash:
-        raise HTTPException(status_code=403, detail="NO_HASH")
+        received_hash = parsed.get("hash")
+        if not received_hash:
+            raise HTTPException(status_code=403, detail="NO_HASH")
 
-    if not hash_matches(parsed, settings.bot_token, received_hash):
-        computed_hash = compute_telegram_hash(parsed, settings.bot_token)
-        client_ip = request.client.host if request.client else "unknown"
-        logger.warning(
-            "Bad Telegram initData HMAC: ip=%s received=%s… computed=%s… "
-            "auth_date=%s deploy_marker=TIMEPICKER_CI_BUILD",
-            client_ip,
-            received_hash[:8],
-            computed_hash[:8],
-            parsed.get("auth_date"),
+        if not hash_matches(parsed, settings.bot_token, received_hash):
+            # The address and the forwarded chain, to learn how the proxy builds it
+            # (SECURITY.md); never any part of the correct hash (Batch 27, L1).
+            logger.warning(
+                "Bad Telegram initData HMAC: ip=%s forwarded=%s received=%s… auth_date=%s",
+                request.client.host if request.client else "unknown",
+                ((getattr(request, "headers", None) or {}).get("x-forwarded-for") or "-")[:200],
+                received_hash[:8],
+                parsed.get("auth_date"),
+            )
+            raise HTTPException(status_code=403, detail="BAD_HASH")
+
+        validate_auth_date(
+            auth_date_raw=parsed.get("auth_date"),
+            max_age_seconds=settings.telegram_initdata_max_age,
+            max_future_skew_seconds=settings.telegram_initdata_future_skew,
         )
-        raise HTTPException(status_code=403, detail="BAD_HASH")
 
-    validate_auth_date(
-        auth_date_raw=parsed.get("auth_date"),
-        max_age_seconds=settings.telegram_initdata_max_age,
-        max_future_skew_seconds=settings.telegram_initdata_future_skew,
-    )
+        user_raw = parsed.get("user")
+        if not user_raw:
+            raise HTTPException(status_code=403, detail="NO_USER")
 
-    user_raw = parsed.get("user")
-    if not user_raw:
-        raise HTTPException(status_code=403, detail="NO_USER")
+        user_data = parse_init_user(user_raw)
+        user_id = str(user_data.get("id", ""))
 
-    user_data = parse_init_user(user_raw)
-    user_id = str(user_data.get("id", ""))
+        if not user_id or not user_id.isdigit():
+            raise HTTPException(status_code=403, detail="INVALID_ID")
 
-    if not user_id or not user_id.isdigit():
-        raise HTTPException(status_code=403, detail="INVALID_ID")
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            _count_failed_authentication(request, settings)  # may answer 429 instead
+        raise
 
     await check_rate_limit_mongo(user_id, settings, scope)
 
@@ -318,7 +339,8 @@ def client_ip(request) -> str:
     host hammering a share link, and the expensive work behind these routes is
     now 55ms in a threadpool rather than 317ms on the event loop.
     """
-    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    headers = getattr(request, "headers", None) or {}
+    forwarded = (headers.get("x-forwarded-for") or "").split(",")[0].strip()
     if forwarded:
         return forwarded
     return getattr(getattr(request, "client", None), "host", "") or "unknown"
