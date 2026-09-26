@@ -15,7 +15,7 @@ how to reproduce it and what it affects; you will get an answer within a week.
 | Task endpoints (`/tasks/*`) | the cron and the Action | `X-Tasks-Secret`, constant-time compare; closed while `TASKS_SECRET` is unset |
 | Public links (`/c/<token>` and cards) | anyone | 128-bit tokens; a rate limit per address; only title, date and countdown shown; rendering off the event loop |
 | The page | the browser | a strict CSP with no inline scripts; user text inserted as text, never as HTML; `Permissions-Policy` turns off camera, microphone, location, payment and USB; HSTS, `nosniff`, `Referrer-Policy`, CORP |
-| Logs | Render | JSON lines; no tokens (route templates, uvicorn's access lines dropped); no part of any hash; httpx's URL lines quiet |
+| Logs | Render | JSON lines; no tokens (route templates, uvicorn's access lines dropped); no part of any hash; httpx's URL lines quiet; user and chat ids as keyed pseudonyms, and no titles or dates (ADR 0018) |
 
 ## Dependencies
 
