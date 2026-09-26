@@ -137,7 +137,7 @@ Run the web app and the worker in two terminals:
 
 ```bash
 ./deploy/run-dev.sh                # uvicorn on http://127.0.0.1:8000
-./deploy/run-worker.sh             # the reminder loop
+python -m worker.run_once           # one reminder pass, as the Action runs it
 ```
 
 The Mini App only runs inside Telegram, because it needs the `initData` that
@@ -164,7 +164,7 @@ list with comments.
 | `TASKS_SECRET` | Shared secret for `POST /tasks/run-reminders`; empty keeps the endpoint closed |
 | `ADMIN_CHAT_ID` | Your Telegram user id — where the health report is sent |
 | `OVERDUE_AFTER_MINUTES` | How late a pending reminder may be before it is reported |
-| `REMINDER_POLL_INTERVAL_SECS`, `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Worker tuning |
+| `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Reminder tuning |
 
 ### Admin commands
 
@@ -205,10 +205,15 @@ limiting, date and recurrence maths, the event API, and the webhook.
 
 ## Deployment
 
-The `Dockerfile` builds the reminder worker; `fly.toml` deploys it to Fly.io.
-`.github/workflows/reminder.yml` runs the same job on a schedule as a
-fallback, with a healthchecks.io dead-man's switch. `deploy/systemd/` holds
-unit files for a plain VPS.
+Production is one Render web service running native Python: build
+`pip install -r requirements.txt`, start
+`gunicorn -k uvicorn.workers.UvicornWorker app.main:app`, deployed on every
+commit to the service's branch. Reminders are sent by
+`POST /tasks/run-reminders`, called every minute by an external cron with the
+`X-Tasks-Secret` header (ADR 0005). `.github/workflows/reminder.yml` runs the
+same pass on GitHub's schedule as a slower fallback, with a healthchecks.io
+dead-man's switch. The long-running worker and its deployment files were
+removed in Batch 24 (ADR 0012); git history keeps them.
 
 ## Project structure
 

@@ -37,7 +37,7 @@ jobs:
       - name: Run tests
         # main and pull requests into main: every test has to pass.
         if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
-        run: pytest -v --cov=app --cov=worker --cov-report=term --cov-fail-under=75
+        run: pytest -v --cov=app --cov=worker --cov-report=term --cov-fail-under=77
       - name: Run tests (only the known failures may fail)
         # fix/** and feat/** branches: a batch carries its failing tests on purpose until
         # they are fixed (tests/known_failures.txt). This fails on any other

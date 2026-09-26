@@ -23,4 +23,5 @@ are overdue and by how much.
 Punctuality depends on the external cron existing and succeeding, so it has to
 be checked in production and alerted on (Stage 3). With an empty queue,
 `overdue: 0` proves nothing (docs/DEBUGGING.md). The long-running
-`worker/reminder_worker.py` and its deploy files are superseded (Batch 22b).
+`worker/reminder_worker.py` and its deploy files are superseded, and were
+removed in Batch 24 (ADR 0012).

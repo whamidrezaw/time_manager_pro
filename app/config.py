@@ -68,7 +68,6 @@ class Settings(BaseSettings):
 
     reminder_batch_size: int = Field(default=200, alias="REMINDER_BATCH_SIZE")
     stale_processing_secs: int = Field(default=300, alias="STALE_PROCESSING_SECS")
-    reminder_poll_interval_secs: int = Field(default=30, alias="REMINDER_POLL_INTERVAL_SECS")
 
     # Batch 18. The shared secret an external cron sends to trigger a run.
     # Empty means the endpoint stays closed, so a fresh deployment cannot be

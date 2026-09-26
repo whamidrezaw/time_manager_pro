@@ -17,3 +17,4 @@ that every record has them and is listed here.
 - [0009. Limits are managed from the bot, by one admin](0009-admin-control-of-limits.md) (Batch 20 (D13))
 - [0010. Tests reach no network and pin causes, not clocks](0010-tests-are-hermetic-and-measure-causes.md) (Batch 20)
 - [0011. Logs are JSON lines, and RED comes from them](0011-structured-logs-and-red-from-log-lines.md) (Batch 23)
+- [0012. One reminder path: the endpoint, with the Action as fallback](0012-one-reminder-path.md) (Batch 24)
