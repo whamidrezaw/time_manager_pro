@@ -45,7 +45,8 @@ def _duration(minutes: int) -> str:
     return " ".join(p for p in parts if p)
 
 
-def alert_text(kind: str, stats: dict, since: datetime | None = None, now: datetime | None = None) -> str:
+def alert_text(kind: str, stats: dict, since: datetime | None = None, now: datetime | None = None,
+               runbook: str = "") -> str:
     lines = [TITLES[kind], ""]
     if kind in ("repeated", "recovered") and since and now:
         label = "Unresolved for" if kind == "repeated" else "It lasted"
@@ -60,7 +61,12 @@ def alert_text(kind: str, stats: dict, since: datetime | None = None, now: datet
     if stats.get("failed"):
         lines.append(f"Failed, all time: <b>{stats['failed']}</b>")
     if kind != "recovered":
-        lines += ["", "What to check: docs/RUNBOOK.md"]
+        # A link, not a path: straight to the section of the first reason.
+        anchor = (reasons(stats) or ["test-firing"])[0] if kind != "test" else "test-firing"
+        where = "docs/RUNBOOK.md"
+        if runbook:
+            where = f'<a href="{runbook}#{anchor}">docs/RUNBOOK.md, {anchor}</a>'
+        lines += ["", f"What to check: {where}"]
     return "\n".join(lines)
 
 
@@ -72,7 +78,7 @@ async def send_alert(kind: str, stats: dict, settings: Settings | None = None,
     try:
         async with Bot(token=settings.bot_token) as bot:
             await bot.send_message(chat_id=settings.admin_chat_id, parse_mode="HTML",
-                                   text=alert_text(kind, stats, since, now))
+                                   text=alert_text(kind, stats, since, now, runbook=settings.runbook_url))
     except Exception:
         logger.exception("alert could not be delivered", extra={"event": "alert_failed", "kind": kind})
         return False

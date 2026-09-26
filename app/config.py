@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     # How late a pending reminder has to be before it counts as overdue.
     overdue_after_minutes: int = Field(default=10, alias="OVERDUE_AFTER_MINUTES")
     healthcheck_ping_url: str = Field(default="", alias="HEALTHCHECK_PING_URL")  # the cron check (ADR 0014)
+    runbook_url: str = Field(
+        default="https://github.com/whamidrezaw/time_manager_pro/blob/main/docs/RUNBOOK.md",
+        alias="RUNBOOK_URL")  # where an alert's link points
     default_reminder_hour: int = Field(default=9, alias="DEFAULT_REMINDER_HOUR")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
