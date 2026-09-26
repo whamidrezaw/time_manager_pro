@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hmac
 import logging
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 
 from app.config import Settings, get_settings
 from app.services.admin import ADMIN_COMMANDS, handle_admin_command, is_admin, remember_username
+from app.services.erasure import delete_user_data
 from app.services.reminders import handle_snooze_callback
 from app.utils.i18n import resolve_language, t
 
@@ -110,6 +112,9 @@ async def _handle_message(update: Update, bot: Bot, settings: Settings) -> None:
     # update, so a user who switches language sees the change immediately.
     language = resolve_language(getattr(message.from_user, "language_code", None))
 
+    if command == "/deletemydata":
+        await _ask_before_deleting(bot, message, language)
+        return
     if command == "/start":
         key = "start"
         await _attach_referral_from_start(message)
@@ -140,6 +145,9 @@ async def _handle_callback_query(update: Update, bot: Bot) -> None:
         await _safe_answer(bot, query.id, t("unknown_action", language))
         return
 
+    if action == "delme":
+        await _confirm_deleting(bot, query, event_id, language)
+        return
     if action == "snooze1h":
         # Authorization lives in handle_snooze_callback: it matches on both
         # _id and user_id (query.from_user.id), the same IDOR-safe pattern
@@ -150,6 +158,49 @@ async def _handle_callback_query(update: Update, bot: Bot) -> None:
         text = t("unknown_action", language)
 
     await _safe_answer(bot, query.id, text)
+
+
+CONFIRM_FOR = timedelta(minutes=10)
+
+
+async def _ask_before_deleting(bot: Bot, message, language: str) -> None:
+    """/deletemydata asks first, in a private chat, with a button bound to the
+    sender; nothing is erased until that button is pressed (ADR 0017)."""
+    if getattr(message.chat, "type", "") != "private":
+        text, markup = t("delete_private_only", language), None
+    else:
+        text = t("delete_ask", language)
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton(t("delete_yes", language), callback_data=f"delme:{message.from_user.id}"),
+            InlineKeyboardButton(t("delete_no", language), callback_data="delme:no"),
+        ]])
+    try:
+        await bot.send_message(chat_id=message.chat_id, text=text, reply_markup=markup)
+    except Exception:
+        logger.exception("Failed to ask before deleting, chat_id=%s", message.chat_id)
+
+
+async def _confirm_deleting(bot: Bot, query, answer: str, language: str) -> None:
+    if answer == "no":
+        await _replace(bot, query, t("delete_cancelled", language))
+    elif str(query.from_user.id) != answer:
+        await _safe_answer(bot, query.id, t("delete_not_yours", language))
+        return
+    elif query.message is None or datetime.now(timezone.utc) - query.message.date > CONFIRM_FOR:
+        await _replace(bot, query, t("delete_expired", language))
+    else:
+        await delete_user_data(answer)
+        await _replace(bot, query, t("delete_done", language))
+    await _safe_answer(bot, query.id, "")
+
+
+async def _replace(bot: Bot, query, text: str) -> None:
+    """Edit the confirmation in place, which also takes its buttons away."""
+    try:
+        await bot.edit_message_text(text=text, chat_id=query.message.chat_id,
+                                    message_id=query.message.message_id)
+    except Exception:
+        logger.exception("Failed to edit the confirmation")
 
 
 async def _safe_answer(bot: Bot, callback_query_id: str, text: str) -> None:

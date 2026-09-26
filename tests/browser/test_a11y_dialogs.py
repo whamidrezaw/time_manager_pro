@@ -84,6 +84,10 @@ def open_dialog(open_app, name: str):
         dialog, title = "#onboardingOverlay", "#onboardingTitle"
     elif name == "invite":
         page = open_app(invite=True)
+        # The card appears once the join preview is back from the server: wait
+        # for the network to settle, not for a clock (ADR 0010). Under a loaded
+        # full run a fixed five seconds sometimes ran out first (Batch 27).
+        page.wait_for_load_state("networkidle")
         dialog, title = ".invite-overlay", "#inviteTitle"
     else:
         page = open_app()

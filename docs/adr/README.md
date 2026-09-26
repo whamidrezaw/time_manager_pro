@@ -22,3 +22,4 @@ that every record has them and is listed here.
 - [0014. Alerts: once, every six hours, and at the end; healthchecks.io for silence](0014-alerts-stateful-by-telegram-and-healthchecks.md) (Batch 25)
 - [0015. Unauthenticated requests are bounded](0015-unauthenticated-requests-are-bounded.md) (Batch 27)
 - [0016. The client's address is the rightmost one that is not a proxy's](0016-the-client-address-is-the-rightmost-that-is-not-a-proxy.md) (Batch 27)
+- [0017. Erasure on request, by a bot command with a confirmation](0017-erasure-on-request.md) (Batch 27)
