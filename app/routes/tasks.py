@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hmac
 import logging
+import time
 
 from fastapi import APIRouter, Header, HTTPException
 from telegram import Bot
 
 from app.config import get_settings
+from app.observability import log_reminder_run
 from app.services.health import measure, send_report
 from app.services.reminders import process_due_reminders, recover_stale_processing
 
@@ -43,6 +45,7 @@ async def run_reminders(x_tasks_secret: str | None = Header(default=None)) -> di
     """
     _authorise(x_tasks_secret)
     settings = get_settings()
+    started = time.perf_counter()
 
     recovered = await recover_stale_processing(settings)
 
@@ -55,8 +58,7 @@ async def run_reminders(x_tasks_secret: str | None = Header(default=None)) -> di
         # a reminder that is late is only useful if it is fixed today.
         await send_report(settings, only_if_unhealthy=True)
 
-    logger.info("task run processed=%s recovered=%s overdue=%s",
-                processed, recovered, stats["overdue"])
+    log_reminder_run(logger, "cron", processed, recovered, stats, started)
     return {"success": True, "processed": processed, "recovered": recovered,
             "overdue": stats["overdue"]}
 
