@@ -169,3 +169,23 @@ def test_every_alert_reason_has_a_section_in_the_runbook():
     missing = [name for name in ("late", "stuck", "failed_24h", "failed") if f"\n## {name}\n" not in runbook]
     assert not missing and "## The cron check is down" in runbook and "## Test-firing" in runbook, missing
     assert "docs/RUNBOOK.md" in alerts().alert_text("started", stats(overdue=1))
+
+
+RUNBOOK = "https://github.com/whamidrezaw/time_manager_pro/blob/main/docs/RUNBOOK.md"
+
+
+@pytest.mark.parametrize(("numbers", "anchor"), [({"overdue": 1}, "late"), ({"stuck": 1}, "stuck"),
+                                                  ({"failed_last_24h": 1, "failed": 1}, "failed_24h"),
+                                                  ({"failed": 1}, "failed")])
+def test_an_alert_links_to_the_runbook_section_of_its_first_reason(numbers, anchor):
+    """A path in a Telegram message is not a link; the admin asked where it was."""
+    from pathlib import Path
+
+    text = alerts().alert_text("started", stats(**numbers), runbook=RUNBOOK)
+    assert f'href="{RUNBOOK}#{anchor}"' in text, text
+    runbook = (Path(__file__).resolve().parents[1] / "docs" / "RUNBOOK.md").read_text(encoding="utf-8")
+    assert f"\n## {anchor}\n" in runbook  # GitHub's anchor for that heading
+
+
+def test_the_runbook_link_comes_from_the_settings():
+    assert get_settings().runbook_url == RUNBOOK

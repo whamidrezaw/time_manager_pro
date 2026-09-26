@@ -30,6 +30,13 @@ class _RequestId(logging.Filter):
         return True
 
 
+class _DropAccess(logging.Filter):
+    """Drops uvicorn's access lines: the RED line replaces them (ADR 0011)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return False
+
+
 class JsonFormatter(logging.Formatter):
     """One JSON object per line: time, level, logger, message, request id, and
     every field passed as `extra` (an `event` names the kind of line)."""
@@ -65,8 +72,14 @@ def configure_logging(settings) -> None:
     root = logging.getLogger()
     root.handlers[:] = [h for h in root.handlers if not getattr(h, "_tm_pro", False)] + [handler]
     root.setLevel(getattr(logging, str(settings.log_level).upper(), logging.INFO))
-    # The RED line below replaces uvicorn's access log; both would say the same.
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # The RED line below replaces uvicorn's access log, which names the raw path
+    # (a public link's token) and the client's address. The gunicorn worker sets
+    # that logger's handlers and level again after the app is imported, so a
+    # level alone was undone in production; a filter on the logger outlasts it.
+    access = logging.getLogger("uvicorn.access")
+    access.setLevel(logging.WARNING)
+    if not any(isinstance(f, _DropAccess) for f in access.filters):
+        access.addFilter(_DropAccess())
     # httpx logs every URL it calls at INFO, and the Telegram API's carry the
     # bot token. Quiet in every environment, not only when APP_ENV says so.
     for name in ("httpx", "httpcore"):

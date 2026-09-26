@@ -125,3 +125,29 @@ async def test_a_reminder_run_logs_its_summary(caplog, monkeypatch):
     runs = [r for r in caplog.records if getattr(r, "event", None) == "reminder_run"]
     assert len(runs) == 1
     assert {"processed", "recovered", "overdue", "duration_ms"} <= set(vars(runs[0]))
+
+
+def test_uvicorns_access_log_stays_off_when_a_worker_turns_it_back_on():
+    """Found in production (Batch 26): the gunicorn worker sets the access
+    logger's handlers and level again after the app is imported, so the level
+    set here was undone and every raw path, a public link's token included,
+    and every client address went to the logs beside the RED line."""
+    from app.config import get_settings
+
+    observability().configure_logging(get_settings())
+    access = logging.getLogger("uvicorn.access")
+    caught: list[logging.LogRecord] = []
+
+    class Catch(logging.Handler):
+        def emit(self, record):
+            caught.append(record)
+
+    saved = (access.handlers[:], access.level, access.propagate)
+    access.handlers, access.propagate = [Catch()], False  # what uvicorn-worker does
+    access.setLevel(logging.INFO)
+    try:
+        access.info('%s - "%s %s HTTP/%s" %d', "203.0.113.9:0", "GET", "/c/secret-token-123", "1.1", 200)
+    finally:
+        access.handlers, access.propagate = saved[0], saved[2]
+        access.setLevel(saved[1])
+    assert not caught, [r.getMessage() for r in caught]

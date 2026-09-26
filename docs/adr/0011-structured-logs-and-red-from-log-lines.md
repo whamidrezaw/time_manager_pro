@@ -21,4 +21,9 @@ duration are read from those lines, not from a metrics server.
 ## Consequences
 Nothing new to run or pay for, and a line can be searched by `request_id`,
 `event` or `route`. Render keeps logs for a limited time, so a longer history
-would need a log service later. Alerts are the other half (ADR 0012, Stage 3b).
+would need a log service later. Alerts are the other half (ADR 0014).
+
+Amended in Batch 26: production showed uvicorn's access lines, raw paths and
+client addresses, beside the RED lines. The gunicorn worker sets the access
+logger's handlers and level again after the app is imported, so a level
+alone was undone; a filter on that logger now drops them.

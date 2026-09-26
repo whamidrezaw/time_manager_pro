@@ -165,6 +165,7 @@ list with comments.
 | `ADMIN_CHAT_ID` | Your Telegram user id — where the health report is sent |
 | `OVERDUE_AFTER_MINUTES` | How late a pending reminder may be before it is reported |
 | `HEALTHCHECK_PING_URL` | healthchecks.io ping URL of the cron check; empty: no ping (ADR 0014) |
+| `RUNBOOK_URL` | Where an alert's link points; defaults to `docs/RUNBOOK.md` on GitHub |
 | `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Reminder tuning |
 
 ### Admin commands
