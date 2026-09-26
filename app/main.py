@@ -16,7 +16,7 @@ from app.db import (
     ensure_indexes,
     stop_expiring_one_off_events,
 )
-from app.middleware import CSP, SecurityHeadersMiddleware
+from app.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware, effective_csp
 from app.observability import RequestContextMiddleware, configure_logging
 from app.routes.calendar import router as calendar_router
 from app.routes.chats import router as chats_router
@@ -80,13 +80,9 @@ app = FastAPI(
 
 # Before the routes, so it also covers /static and any error response the
 # framework produces on its own.
-app.add_middleware(
-    SecurityHeadersMiddleware,
-    policy=(
-        CSP if settings.content_security_policy is None
-        else settings.content_security_policy
-    ),
-)
+# Innermost of the three: a body over the limit is refused before it is read.
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
+app.add_middleware(SecurityHeadersMiddleware, policy=effective_csp(settings))
 # Added last, so it is the outermost: its id and timing cover everything below.
 app.add_middleware(RequestContextMiddleware)
 

@@ -62,7 +62,7 @@ class ReminderSpec(APIModel):
 
 
 class InitDataPayload(APIModel):
-    initData: str = Field(..., min_length=1)
+    initData: str = Field(..., min_length=1, max_length=8192)  # Telegram's is ~1-2 KB (Batch 27, M1)
 
 
 class EventIdPayload(InitDataPayload):

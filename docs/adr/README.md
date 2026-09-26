@@ -20,3 +20,4 @@ that every record has them and is listed here.
 - [0012. One reminder path: the endpoint, with the Action as fallback](0012-one-reminder-path.md) (Batch 24)
 - [0013. Production starts through the uvicorn-worker package](0013-production-starts-through-uvicorn-worker.md) (Batch 25)
 - [0014. Alerts: once, every six hours, and at the end; healthchecks.io for silence](0014-alerts-stateful-by-telegram-and-healthchecks.md) (Batch 25)
+- [0015. Unauthenticated requests are bounded](0015-unauthenticated-requests-are-bounded.md) (Batch 27)

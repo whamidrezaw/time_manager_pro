@@ -166,6 +166,8 @@ list with comments.
 | `OVERDUE_AFTER_MINUTES` | How late a pending reminder may be before it is reported |
 | `HEALTHCHECK_PING_URL` | healthchecks.io ping URL of the cron check; empty: no ping (ADR 0014) |
 | `RUNBOOK_URL` | Where an alert's link points; defaults to `docs/RUNBOOK.md` on GitHub |
+| `MAX_REQUEST_BYTES` | Largest request body accepted, 65536 by default; larger gets 413 |
+| `RATE_LIMIT_AUTH_FAIL_COUNT`, `RATE_LIMIT_AUTH_FAIL_GLOBAL` | Failed authentications a minute, per address (30) and in total (300); more get 429 |
 | `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Reminder tuning |
 
 ### Admin commands
@@ -200,6 +202,7 @@ limiting, date and recurrence maths, the event API, and the webhook.
 ## Documentation
 
 - `CONSTRAINTS.md`: the quality bar, with its numbers and decisions
+- `SECURITY.md`: reporting a vulnerability, what is defended, the accepted risks
 - `docs/DEFINITION_OF_DONE.md`: what every change has to meet
 - `docs/adr/`: the architecture decisions, and why
 - `docs/DEBUGGING.md`: finding a problem in production
