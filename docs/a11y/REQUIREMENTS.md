@@ -63,18 +63,6 @@ validation errors shown while the composer is open would never be announced.
 
 ## Found along the way (not fixed yet)
 
-- **Saving an event waits for Telegram.** `/api/add` sends its confirmation
-  message (`getMe`, then `sendMessage`) before it answers, so a slow or
-  unreachable Telegram holds the composer open, up to the client's timeouts.
-  Found through a flaky test in Batch 20; the decision on sending the message
-  after the answer is pending.
-
-- **A correction to the first review.** It said the heading and the dates
-  inside a card's `role="button"` were never read. Measured in Batch 20:
-  Chromium keeps them in its accessibility tree. Phone screen readers usually
-  read a button as one stop by its name, though, and that name was "Open
-  details for ...", which is why the card now carries a description instead.
-
 - **Share card and the CSP.** The preview is loaded from `WEBAPP_BASE_URL`,
   not from the origin serving the page. Today both are the same; if a custom
   domain ever makes them differ, `img-src 'self'` refuses the preview. Use a
@@ -95,3 +83,15 @@ validation errors shown while the composer is open would never be announced.
 - Contrast under a few real Telegram themes.
 
 Record the results in the pull request.
+
+## Settled along the way
+
+- **A correction to the first review.** It said the heading and the dates
+  inside a card's `role="button"` were never read. Measured in Batch 20:
+  Chromium keeps them in its accessibility tree. Phone screen readers usually
+  read a button as one stop by its name, though, and that name was "Open
+  details for ...", which is why the card now carries a description instead.
+
+- **Saving an event waited for Telegram.** `/api/add` sent its confirmation
+  message before it answered, so a slow Telegram held the composer open. Fixed
+  in Batch 20, step 11 (decision S1): the message goes out after the answer.

@@ -58,7 +58,10 @@ curl -s -X POST -H "X-Tasks-Secret: $TASKS_SECRET" https://YOUR_HOST/tasks/healt
 ```
 
 `overdue: 0` means the queue is moving and the problem is one event, not the
-worker. A non-zero `overdue` with a large `worst_late_minutes` means the
+worker — when the queue has traffic. With `due_next_24h: 0` and
+`touched_last_24h: 0` nothing could be late, and `overdue: 0` proves nothing:
+test the trigger itself, with an event due in three minutes or the Render logs
+for `run-reminders`. A non-zero `overdue` with a large `worst_late_minutes` means the
 trigger is not firing — check the cron, then the GitHub Action.
 
 Then look at the event itself: `notify_status` should be `pending` with a

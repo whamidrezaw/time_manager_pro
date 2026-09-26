@@ -33,6 +33,7 @@ file is not weakened in the same commit as a change that was failing it.
 
 | Dimension | Rule | Checked by | Runs at |
 |-----------|------|------------|---------|
+| Coverage | At least 75 % of the lines in `app/` and `worker/` (76 % measured in Batch 22, with the old worker's 51 dead lines still counted at 0 %) | pytest-cov: `--cov=app --cov=worker --cov-fail-under=75` | CI: the full suite on `main` and every pull request into it |
 | Accessibility (external) | Zero serious or critical axe violations, tags `wcag2a wcag2aa wcag21a wcag21aa`, on list (light and dark), composer, detail and month | axe-core 4.13.0, vendored and SHA-256 pinned, in Chromium through Playwright: `pytest -m browser` | CI: every push to `main`, `fix/**` and `feat/**`, and every PR |
 | Accessibility (behaviour) | A11Y-01 to A11Y-09 in `docs/a11y/REQUIREMENTS.md` green | `pytest tests/browser tests/test_a11y_findings.py` | CI |
 | Contrast (fast) | Fallback palette text pairs ≥ 4.5:1 | `pytest tests/test_a11y_findings.py` | Every local run (milliseconds) |
