@@ -121,8 +121,10 @@ with no colour changed.
 
 - **D14 — observability (Batch 23, chosen):** JSON log lines in Render's own
   stream, with a request id on every line and response; RED read from one line
-  per request (route template, never a token) and one per reminder run; alerts
-  by Telegram and healthchecks.io (Stage 3b). See ADR 0011.
+  per request (route template, never a token) and one per reminder run. Alerts
+  (Batch 25, chosen): late, stuck, failed in 24 h and any failed reminder;
+  once at the start, every six hours while it lasts, once at the end; a
+  healthchecks.io ping per cron run. See ADR 0011 and ADR 0014.
 
 ## Exceptions
 

@@ -164,6 +164,7 @@ list with comments.
 | `TASKS_SECRET` | Shared secret for `POST /tasks/run-reminders`; empty keeps the endpoint closed |
 | `ADMIN_CHAT_ID` | Your Telegram user id — where the health report is sent |
 | `OVERDUE_AFTER_MINUTES` | How late a pending reminder may be before it is reported |
+| `HEALTHCHECK_PING_URL` | healthchecks.io ping URL of the cron check; empty: no ping (ADR 0014) |
 | `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Reminder tuning |
 
 ### Admin commands
@@ -201,6 +202,7 @@ limiting, date and recurrence maths, the event API, and the webhook.
 - `docs/DEFINITION_OF_DONE.md`: what every change has to meet
 - `docs/adr/`: the architecture decisions, and why
 - `docs/DEBUGGING.md`: finding a problem in production
+- `docs/RUNBOOK.md`: what to do when an alert arrives
 - `docs/a11y/REQUIREMENTS.md`: the accessibility requirements and their tests
 
 ## Deployment
