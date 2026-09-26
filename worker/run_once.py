@@ -8,19 +8,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+import time
 
 from telegram import Bot
 
 from app.config import get_settings
 from app.db import close_mongo_connection, connect_to_mongo, ensure_indexes
+from app.observability import configure_logging, log_reminder_run
+from app.services.health import measure
 from app.services.reminders import process_due_reminders
 
 settings = get_settings()
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
+configure_logging(settings)  # the same JSON lines as the web app (ADR 0011)
 logger = logging.getLogger("tm_pro.run_once")
 
 
@@ -44,13 +44,18 @@ async def main() -> None:
     logger.info("run_once: connected. processing reminders...")
 
     exit_code = 0
+    started = time.perf_counter()
     try:
         async with Bot(token=settings.bot_token) as bot:
             processed = await asyncio.wait_for(
                 process_due_reminders(bot=bot, settings=settings),
                 timeout=60.0,
             )
-            logger.info("run_once: done. processed=%s reminders.", processed)
+            try:
+                stats = await measure(settings)
+            except Exception:  # a failed measurement must not fail the run
+                stats = {}
+            log_reminder_run(logger, "action", processed, 0, stats, started)
     except asyncio.TimeoutError:
         logger.error("run_once: reminder processing timed out.")
         exit_code = 1

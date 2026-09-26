@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     default_reminder_hour: int = Field(default=9, alias="DEFAULT_REMINDER_HOUR")
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    log_format: str = Field(default="json", alias="LOG_FORMAT")  # json in production; text on a laptop
 
     @computed_field
     @property

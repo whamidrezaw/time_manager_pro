@@ -16,3 +16,4 @@ that every record has them and is listed here.
 - [0008. A failing colour keeps its hue and moves only as far as it must](0008-the-colour-contrast-rule.md) (Batch 20 (D4, D11))
 - [0009. Limits are managed from the bot, by one admin](0009-admin-control-of-limits.md) (Batch 20 (D13))
 - [0010. Tests reach no network and pin causes, not clocks](0010-tests-are-hermetic-and-measure-causes.md) (Batch 20)
+- [0011. Logs are JSON lines, and RED comes from them](0011-structured-logs-and-red-from-log-lines.md) (Batch 23)

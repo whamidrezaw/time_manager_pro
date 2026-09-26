@@ -119,6 +119,11 @@ with no colour changed.
   Every change is audited. Card-render speed is pinned through its causes (the
   font and backdrop caches, no PNG optimize), with a 500 ms CPU safety net.
 
+- **D14 — observability (Batch 23, chosen):** JSON log lines in Render's own
+  stream, with a request id on every line and response; RED read from one line
+  per request (route template, never a token) and one per reminder run; alerts
+  by Telegram and healthchecks.io (Stage 3b). See ADR 0011.
+
 ## Exceptions
 
 | ID | Rule | Path | Reason | Owner | Expires |

@@ -17,6 +17,7 @@ from app.db import (
     stop_expiring_one_off_events,
 )
 from app.middleware import CSP, SecurityHeadersMiddleware
+from app.observability import RequestContextMiddleware, configure_logging
 from app.routes.calendar import router as calendar_router
 from app.routes.chats import router as chats_router
 from app.routes.events import router as events_router
@@ -30,16 +31,8 @@ from app.routes.web import router as web_router
 
 settings = get_settings()
 
-root_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+configure_logging(settings)  # JSON lines with request ids (ADR 0011)
 
-logging.basicConfig(
-    level=root_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-
-if settings.app_env.lower() == "production":
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 logger = logging.getLogger("tm_pro.app")
 
@@ -94,6 +87,8 @@ app.add_middleware(
         else settings.content_security_policy
     ),
 )
+# Added last, so it is the outermost: its id and timing cover everything below.
+app.add_middleware(RequestContextMiddleware)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
