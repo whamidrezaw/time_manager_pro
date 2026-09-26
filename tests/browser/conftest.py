@@ -81,7 +81,10 @@ class LiveServer:
 
         self.loop = asyncio.new_event_loop()
         # lifespan off: startup would call Telegram and a real MongoDB.
-        config = uvicorn.Config(app, host="127.0.0.1", port=self.port, lifespan="off", log_level="warning")
+        # ws="none": the app has no WebSockets, and loading uvicorn's support for
+        # them brought two deprecation warnings into every browser run.
+        config = uvicorn.Config(app, host="127.0.0.1", port=self.port, lifespan="off",
+                                log_level="warning", ws="none")
         self.server = uvicorn.Server(config)
         self.thread = threading.Thread(target=self._serve, name="a11y-live-server", daemon=True)
 
