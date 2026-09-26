@@ -46,6 +46,7 @@ async def measure(settings: Settings | None = None) -> dict:
     # A permanently undeliverable reminder used to be invisible here, so a
     # blocked bot looked exactly like a healthy queue.
     failed = await events.count_documents({"notify_status": "failed"})
+    failed_recent = await events.count_documents({"notify_status": "failed", "updated_at": {"$gte": day_ago}})
 
     worst = await events.find_one(
         {"notify_status": "pending", "next_notify_at": {"$lt": overdue_cutoff}},
@@ -65,6 +66,7 @@ async def measure(settings: Settings | None = None) -> dict:
         "due_next_24h": upcoming,
         "touched_last_24h": sent_today,
         "failed": failed,
+        "failed_last_24h": failed_recent,
         "healthy": overdue == 0 and stuck == 0 and failed == 0,
     }
 
@@ -91,14 +93,12 @@ def format_report(stats: dict) -> str:
     return "\n".join(lines)
 
 
-async def send_report(settings: Settings | None = None, only_if_unhealthy: bool = False) -> dict:
+async def send_report(settings: Settings | None = None) -> dict:
     """Measure, and tell the admin. Returns the numbers either way."""
     settings = settings or get_settings()
     stats = await measure(settings)
 
     if not settings.admin_chat_id:
-        return stats
-    if only_if_unhealthy and stats["healthy"]:
         return stats
 
     try:

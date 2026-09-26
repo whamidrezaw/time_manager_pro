@@ -164,6 +164,7 @@ list with comments.
 | `TASKS_SECRET` | Shared secret for `POST /tasks/run-reminders`; empty keeps the endpoint closed |
 | `ADMIN_CHAT_ID` | Your Telegram user id — where the health report is sent |
 | `OVERDUE_AFTER_MINUTES` | How late a pending reminder may be before it is reported |
+| `HEALTHCHECK_PING_URL` | healthchecks.io ping URL of the cron check; empty: no ping (ADR 0014) |
 | `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Reminder tuning |
 
 ### Admin commands
@@ -201,14 +202,16 @@ limiting, date and recurrence maths, the event API, and the webhook.
 - `docs/DEFINITION_OF_DONE.md`: what every change has to meet
 - `docs/adr/`: the architecture decisions, and why
 - `docs/DEBUGGING.md`: finding a problem in production
+- `docs/RUNBOOK.md`: what to do when an alert arrives
 - `docs/a11y/REQUIREMENTS.md`: the accessibility requirements and their tests
 
 ## Deployment
 
 Production is one Render web service running native Python: build
 `pip install -r requirements.txt`, start
-`gunicorn -k uvicorn.workers.UvicornWorker app.main:app`, deployed on every
-commit to the service's branch. Reminders are sent by
+`gunicorn -k uvicorn_worker.UvicornWorker app.main:app` (Render's Start
+Command must say exactly this; ADR 0013), deployed on every commit to the
+service's branch. Reminders are sent by
 `POST /tasks/run-reminders`, called every minute by an external cron with the
 `X-Tasks-Secret` header (ADR 0005). `.github/workflows/reminder.yml` runs the
 same pass on GitHub's schedule as a slower fallback, with a healthchecks.io

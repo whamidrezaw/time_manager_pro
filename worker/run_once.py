@@ -15,6 +15,7 @@ from telegram import Bot
 from app.config import get_settings
 from app.db import close_mongo_connection, connect_to_mongo, ensure_indexes
 from app.observability import configure_logging, log_reminder_run
+from app.services.alerts import check_and_alert
 from app.services.health import measure
 from app.services.reminders import process_due_reminders
 
@@ -56,6 +57,8 @@ async def main() -> None:
             except Exception:  # a failed measurement must not fail the run
                 stats = {}
             log_reminder_run(logger, "action", processed, 0, stats, started)
+            if stats:  # the Action alerts too, so an alert does not depend on the cron
+                await check_and_alert(stats, settings)
     except asyncio.TimeoutError:
         logger.error("run_once: reminder processing timed out.")
         exit_code = 1

@@ -8,6 +8,7 @@ python-telegram-bot==21.1
 fastapi==0.141.1
 uvicorn[standard]==0.30.6
 gunicorn==22.0.0
+uvicorn-worker==0.3.0  # the worker class gunicorn starts (ADR 0013)
 
 # ==================== SETTINGS / VALIDATION ====================
 pydantic==2.10.3

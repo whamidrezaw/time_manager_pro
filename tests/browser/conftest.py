@@ -126,6 +126,7 @@ TELEGRAM_MODULES = (
     "app.routes.events",
     "app.routes.tasks",
     "app.routes.telegram",
+    "app.services.alerts",
     "app.services.health",
     "app.services.referrals",
 )
