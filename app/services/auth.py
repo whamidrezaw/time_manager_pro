@@ -19,6 +19,7 @@ from fastapi import HTTPException, Request
 from pymongo import ReturnDocument
 
 from app.config import Settings, get_settings
+from app.utils.net import client_address
 
 logger = logging.getLogger("tm_pro.auth")
 
@@ -281,7 +282,7 @@ async def validate_init_data(
             # (SECURITY.md); never any part of the correct hash (Batch 27, L1).
             logger.warning(
                 "Bad Telegram initData HMAC: ip=%s forwarded=%s received=%s… auth_date=%s",
-                request.client.host if request.client else "unknown",
+                client_ip(request),
                 ((getattr(request, "headers", None) or {}).get("x-forwarded-for") or "-")[:200],
                 received_hash[:8],
                 parsed.get("auth_date"),
@@ -329,21 +330,16 @@ async def get_authenticated_user_id(
 
 
 def client_ip(request) -> str:
-    """Best-effort client address for anonymous rate limiting.
+    """The client's address for per-address limits and security logs.
 
-    Render terminates TLS and forwards the real address in X-Forwarded-For, so
-    request.client.host is the proxy. The leftmost entry is the one the proxy
-    saw. It is client-supplied and therefore spoofable: an attacker who rotates
-    the header gets a fresh budget each time. That is a ceiling on how much
-    this can do, not a reason to skip it — it stops the ordinary case of one
-    host hammering a share link, and the expensive work behind these routes is
-    now 55ms in a threadpool rather than 317ms on the event loop.
+    Not the leftmost X-Forwarded-For entry, which the client writes, nor
+    request.client.host, which uvicorn takes from that same entry in
+    production: the rightmost entry that is not a proxy's (app/utils/net.py,
+    ADR 0016, measured in Batch 27).
     """
     headers = getattr(request, "headers", None) or {}
-    forwarded = (headers.get("x-forwarded-for") or "").split(",")[0].strip()
-    if forwarded:
-        return forwarded
-    return getattr(getattr(request, "client", None), "host", "") or "unknown"
+    peer = getattr(getattr(request, "client", None), "host", "") or "unknown"
+    return client_address(headers.get("x-forwarded-for"), peer)
 
 
 async def check_public_rate_limit(request, settings: Settings | None = None) -> None:

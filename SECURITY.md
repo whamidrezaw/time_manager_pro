@@ -27,23 +27,27 @@ before each release.
 
 - **No framing denial.** Telegram loads the app in a frame (ADR 0002).
   State-changing requests need `initData`, and destructive ones a confirmation.
-- **The client's address can be forged.** It comes from `X-Forwarded-For`, so
-  per-address limits are a first line only; the total on failed authentication
-  holds against invented addresses. Open until the check below is done.
+- **The client's address rests on Cloudflare's published ranges.** It is the
+  rightmost `X-Forwarded-For` entry that is neither internal nor a Cloudflare
+  edge (ADR 0016). An edge from a range Cloudflare adds later would be taken for
+  a client until `app/utils/net.py` lists it, putting the users behind it on one
+  budget: check https://www.cloudflare.com/ips/ before each release.
 - **Referral bonuses can be farmed** with several Telegram accounts; every
   limit stops at `MAX_EVENTS_PER_USER`.
 - **Failed authentications log the address and the forwarded chain**, as
   security events, for as long as Render keeps logs.
 
-## Open: how Render's proxy builds X-Forwarded-For
+## How the client's address is found
 
-Send one request with a forged header and a wrong hash (PowerShell; it answers
-403, which PowerShell shows as an error):
+Measured on 2026-09-26 with one request carrying a forged header and a wrong
+hash, `X-Forwarded-For` arrives as
+
+    <what the client wrote>,<the client, added by Cloudflare>, <a Cloudflare edge, added by Render>, <a Render internal address>
+
+Both the old `client_ip` and uvicorn took the leftmost entry, the forged one.
+The client is the rightmost entry that is neither internal nor a Cloudflare
+edge (`app/utils/net.py`, ADR 0016); whatever a client writes sits to its left.
+To check again, send the same request (PowerShell; the 403 shows as an error)
+and read `forwarded=` in the line `Bad Telegram initData HMAC`:
 
     Invoke-RestMethod -Method Post -Uri https://timemanager-pro.onrender.com/api/list -ContentType "application/json" -Headers @{ "X-Forwarded-For" = "203.0.113.7" } -Body '{"initData": "auth_date=1&hash=00"}'
-
-In Render's logs, the line `Bad Telegram initData HMAC` shows `forwarded=`:
-
-- `203.0.113.7, <your address>`: the proxy appends. The address it added is the
-  rightmost one, and `client_ip` should take that one.
-- only `<your address>`: the proxy overwrites, and the header cannot be forged.
