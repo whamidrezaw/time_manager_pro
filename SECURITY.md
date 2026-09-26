@@ -37,6 +37,20 @@ before each release.
 - **Failed authentications log the address and the forwarded chain**, as
   security events, for as long as Render keeps logs.
 
+## Erasure on request
+
+Anyone can send `/deletemydata` to the bot in a private chat (ADR 0017). It
+asks first, with a button that only the sender can press and that expires
+after ten minutes. Then everything the app keeps about that person is erased:
+their events with the public and join links on them, their user and referral
+record, their username, a limit the admin set for them, their rate-limit
+counters and their membership of group chats. Invitees stop pointing at them,
+and the admin's audit trail keeps what was done with the target replaced.
+
+What stays belongs to others or lies outside the app: a group chat's record,
+other members' own copies of a shared event, messages the bot already sent in
+Telegram, and Render's logs until they expire.
+
 ## How the client's address is found
 
 Measured on 2026-09-26 with one request carrying a forged header and a wrong

@@ -170,6 +170,14 @@ list with comments.
 | `RATE_LIMIT_AUTH_FAIL_COUNT`, `RATE_LIMIT_AUTH_FAIL_GLOBAL` | Failed authentications a minute, per address (30) and in total (300); more get 429 |
 | `REMINDER_BATCH_SIZE`, `STALE_PROCESSING_SECS` | Reminder tuning |
 
+### Commands for everyone
+
+| Command | What it does |
+|---|---|
+| `/start` | Opens the app |
+| `/help` | Shows what the bot can do |
+| `/deletemydata` | Erases everything the app keeps about you, after a confirmation (ADR 0017) |
+
 ### Admin commands
 
 The admin is `ADMIN_CHAT_ID` and nobody else; to anyone else these are unknown

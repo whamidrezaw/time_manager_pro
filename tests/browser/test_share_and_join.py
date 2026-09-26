@@ -28,6 +28,7 @@ def test_the_share_preview_names_its_picture_and_loads_it_from_this_page(open_ap
 
 def test_the_join_card_names_its_picture_and_loads_it_from_this_page(open_app):
     page = open_app(invite=True, invite_card=True)
+    page.wait_for_load_state("networkidle")  # the card waits on the join preview (ADR 0010)
     image = page.locator(".invite-image")
     expect(image).to_be_visible(timeout=5000)
 
@@ -44,6 +45,7 @@ def test_joining_an_event_you_already_have_says_so_in_the_app(open_app):
     expect(page.locator(".invite-overlay")).to_be_hidden(timeout=5000)
 
     page.reload()  # the same link, a second time
+    page.wait_for_load_state("networkidle")  # the card waits on the join preview (ADR 0010)
     expect(page.locator(".invite-overlay")).to_be_visible(timeout=5000)
     page.click("#inviteYes")
 

@@ -32,11 +32,50 @@ _STRINGS: dict[str, dict[str, str]] = {
             "برای باز کردن برنامه و ثبت اولین رویداد، دکمه زیر را بزنید."
         ),
     },
+    # /deletemydata (Batch 27, step 3; ADR 0017)
+    "delete_ask": {
+        "en": (
+            "This deletes everything the app keeps about you: your events with their public "
+            "and join links, your user and referral record, your username, and your links to "
+            "group chats. It cannot be undone."
+        ),
+        "fa": (
+            "این کار همهٔ چیزهایی را که برنامه از شما نگه می‌دارد پاک می‌کند: رویدادهایتان همراه "
+            "با لینک‌های عمومی و دعوت، رکورد کاربری و دعوت‌ها، نام کاربری، و اتصال به گروه‌ها. "
+            "این کار برگشت‌پذیر نیست."
+        ),
+    },
+    "delete_yes": {"en": "Delete everything", "fa": "حذف همه‌چیز"},
+    "delete_no": {"en": "Cancel", "fa": "انصراف"},
+    "delete_done": {
+        "en": (
+            "Done. Everything the app kept about you has been deleted. "
+            "Open the app again to start fresh."
+        ),
+        "fa": (
+            "انجام شد. همهٔ داده‌هایی که برنامه از شما نگه می‌داشت حذف شد. "
+            "با باز کردن دوبارهٔ برنامه از نو شروع می‌کنید."
+        ),
+    },
+    "delete_cancelled": {"en": "Cancelled. Nothing was deleted.", "fa": "لغو شد. چیزی حذف نشد."},
+    "delete_expired": {
+        "en": "This confirmation has expired. Send /deletemydata again.",
+        "fa": "این تأیید منقضی شده است. دوباره دستور /deletemydata را بفرستید.",
+    },
+    "delete_not_yours": {
+        "en": "Only the person who asked can confirm this.",
+        "fa": "فقط کسی که درخواست داده می‌تواند این را تأیید کند.",
+    },
+    "delete_private_only": {
+        "en": "Send /deletemydata to me in a private chat.",
+        "fa": "دستور /deletemydata را در گفتگوی خصوصی با من بفرستید.",
+    },
     "help": {
         "en": (
             "<b>TimeManager Pro — Help</b>\n\n"
             "/start — open the app and see the welcome message\n"
-            "/help — show this message\n\n"
+            "/help — show this message\n"
+            "/deletemydata — delete everything the app keeps about you\n\n"
             "Everything else happens inside the Mini App: add, edit, pin and delete "
             "events, write notes, and pick the exact time you want to be reminded.\n\n"
             "When a reminder arrives, tap <b>⏰ Snooze 1h</b> to push it back an hour, "
@@ -45,7 +84,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fa": (
             "<b>تایم‌منیجر پرو — راهنما</b>\n\n"
             "/start — باز کردن برنامه و دیدن پیام خوش‌آمد\n"
-            "/help — نمایش همین پیام\n\n"
+            "/help — نمایش همین پیام\n"
+            "/deletemydata — حذف همهٔ داده‌های شما در برنامه\n\n"
             "بقیه کارها داخل خود برنامه انجام می‌شود: افزودن، ویرایش، سنجاق و حذف رویداد، "
             "نوشتن یادداشت، و انتخاب دقیق زمانی که می‌خواهید یادآوری شوید.\n\n"
             "وقتی یادآوری رسید، با <b>⏰ یک ساعت بعد</b> آن را یک ساعت به تعویق بیندازید "
