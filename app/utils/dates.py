@@ -72,7 +72,7 @@ def to_jalali(date_iso: str) -> str:
         parsed = datetime.strptime(date_iso, "%Y-%m-%d")
         jalali_date = jdatetime.date.fromgregorian(date=parsed.date())
         return jalali_date.strftime("%Y/%m/%d")
-    except Exception:
+    except (TypeError, ValueError):  # a missing or malformed date, not a bug
         return date_iso
 
 

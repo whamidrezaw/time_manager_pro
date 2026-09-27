@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from bson import ObjectId
+from bson.errors import InvalidId
 
 
 def safe_object_id(raw: str) -> ObjectId:
@@ -18,5 +19,5 @@ def is_valid_object_id(raw: str) -> bool:
     try:
         ObjectId(raw)
         return True
-    except Exception:
+    except (InvalidId, TypeError):  # not an id, not a bug
         return False

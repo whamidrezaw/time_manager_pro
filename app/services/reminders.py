@@ -18,7 +18,7 @@ from app.utils.dates import (
     safe_zoneinfo,
     to_jalali,
 )
-from app.utils.i18n import DEFAULT_LANGUAGE, category_label, repeat_label, t
+from app.utils.i18n import category_label, event_language, repeat_label, t
 from app.utils.ids import object_id_str, safe_object_id
 
 logger = logging.getLogger("tm_pro.reminders")
@@ -52,10 +52,6 @@ def event_reminder_specs(evt: dict) -> list[dict]:
         legacy_hour=evt.get("reminder_hour", 9),
         legacy_minute=evt.get("reminder_minute", 0),
     )
-
-
-def event_language(evt: dict) -> str:
-    return evt.get("lang") or DEFAULT_LANGUAGE
 
 
 def build_reminder_text(evt: dict) -> str:

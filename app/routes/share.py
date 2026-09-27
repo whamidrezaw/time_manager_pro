@@ -18,7 +18,6 @@ from app.services.auth import (
     validate_init_data,
 )
 from app.services.cards import FontsMissing, card_alt, fonts_available, render_event_card
-from app.services.reminders import event_language
 from app.services.sharing import (
     card_url,
     get_public_event,
@@ -28,7 +27,7 @@ from app.services.sharing import (
     set_share_state,
 )
 from app.services.telegram_api import build_photo_result, save_prepared_inline_message
-from app.utils.i18n import t
+from app.utils.i18n import event_language, t
 
 router = APIRouter(tags=["sharing"])
 logger = logging.getLogger("tm_pro.share")
