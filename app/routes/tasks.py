@@ -48,11 +48,25 @@ async def run_reminders(x_tasks_secret: str | None = Header(default=None)) -> di
     settings = get_settings()
     started = time.perf_counter()
 
+    # Each phase timed, so the slow one is found, not guessed (Batch 30).
+    phases: dict[str, float] = {}
+
+    def lap(name: str, since: float) -> float:
+        now = time.perf_counter()
+        phases[name] = round((now - since) * 1000, 1)
+        return now
+
     try:
+        mark = time.perf_counter()
         recovered = await recover_stale_processing(settings)
+        mark = lap("recover_ms", mark)
         async with Bot(token=settings.bot_token) as bot:
+            mark = lap("bot_start_ms", mark)
             processed = await process_due_reminders(bot, settings)
+            mark = lap("process_ms", mark)
+        mark = lap("bot_stop_ms", mark)
         stats = await measure(settings)
+        mark = lap("measure_ms", mark)
     except Exception:
         await ping_healthchecks(settings, fail=True)  # healthchecks.io hears of it at once
         raise
@@ -60,8 +74,10 @@ async def run_reminders(x_tasks_secret: str | None = Header(default=None)) -> di
     # Once when a problem starts, every six hours while it lasts, once when it
     # ends (ADR 0014); the old path sent the whole report after every run.
     await check_and_alert(stats, settings)
-    log_reminder_run(logger, "cron", processed, recovered, stats, started)
+    mark = lap("alert_ms", mark)
     await ping_healthchecks(settings)
+    lap("ping_ms", mark)
+    log_reminder_run(logger, "cron", processed, recovered, stats, started, phases)
     return {"success": True, "processed": processed, "recovered": recovered,
             "overdue": stats["overdue"]}
 

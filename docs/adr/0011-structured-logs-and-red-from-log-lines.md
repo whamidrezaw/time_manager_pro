@@ -27,3 +27,9 @@ Amended in Batch 26: production showed uvicorn's access lines, raw paths and
 client addresses, beside the RED lines. The gunicorn worker sets the access
 logger's handlers and level again after the app is imported, so a level
 alone was undone; a filter on that logger now drops them.
+
+Amended in Batch 30: `duration_ms` is the time until the response is sent,
+what a user waits for; background work after it, like the Telegram
+confirmation of decision S1, shows as `total_ms`. Each request line carries
+its database cost (`db_calls`, `db_ms`, from PyMongo's command monitoring),
+and a reminder run the time of each of its phases.
