@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app import __version__
 from app.config import get_settings
 from app.db import (
     backfill_jalali_dates,
@@ -42,7 +43,7 @@ STATIC_DIR = BASE_DIR / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting %s (%s)", settings.app_name, settings.app_env)
+    logger.info("Starting %s %s (%s)", settings.app_name, __version__, settings.app_env)
 
     try:
         # One bot for the app (ADR 0019); starting it already asked Telegram who it is.
@@ -75,6 +76,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
+    version=__version__,
     debug=settings.app_debug,
     lifespan=lifespan,
 )
