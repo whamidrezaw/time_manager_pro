@@ -14,13 +14,59 @@ import hmac
 import json
 import logging
 import re
+import threading
 import time
 import uuid
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from functools import lru_cache
 
+from pymongo import monitoring
+
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+class RequestCost:
+    """The database commands one request made, and how long they took."""
+
+    __slots__ = ("calls", "ms", "_lock")
+
+    def __init__(self) -> None:
+        self.calls, self.ms, self._lock = 0, 0.0, threading.Lock()
+
+    def add(self, micros: int) -> None:
+        with self._lock:  # a request's commands can finish on several threads
+            self.calls += 1
+            self.ms += micros / 1000
+
+
+request_cost_var: ContextVar[RequestCost | None] = ContextVar("request_cost", default=None)
+
+
+class DatabaseCost(monitoring.CommandListener):
+    """Counts each database command against the request that sent it (Batch 30).
+
+    Motor runs commands on threads but copies the context there, so the
+    request's counter is found; outside a request there is none to add to.
+    """
+
+    def started(self, event) -> None:
+        pass
+
+    def succeeded(self, event) -> None:
+        self._add(event)
+
+    def failed(self, event) -> None:
+        self._add(event)
+
+    @staticmethod
+    def _add(event) -> None:
+        cost = request_cost_var.get()
+        if cost is not None:
+            cost.add(getattr(event, "duration_micros", 0) or 0)
+
+
+DATABASE_COST = DatabaseCost()
 request_logger = logging.getLogger("tm_pro.request")
 
 _VALID_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
@@ -139,25 +185,34 @@ def configure_logging(settings) -> None:
 
 
 def log_reminder_run(logger: logging.Logger, source: str, processed: int, recovered: int,
-                     stats: dict, started: float) -> None:
+                     stats: dict, started: float, phases: dict | None = None) -> None:
     """The one summary line of a reminder run, from the cron endpoint or the Action."""
     duration_ms = round((time.perf_counter() - started) * 1000, 1)
     logger.info("reminder run source=%s processed=%s recovered=%s overdue=%s", source, processed, recovered,
                 stats.get("overdue"), extra={
                     "event": "reminder_run", "source": source, "processed": processed, "recovered": recovered,
                     "overdue": stats.get("overdue"), "worst_late_minutes": stats.get("worst_late_minutes"),
-                    "duration_ms": duration_ms})
+                    "duration_ms": duration_ms, **(phases or {})})
 
 
-def _log_request(scope: dict, status: int, started: float, exc_info: bool = False) -> None:
+def _log_request(scope: dict, status: int, started: float, responded: float | None = None,
+                 exc_info: bool = False) -> None:
     if scope.get("path", "").startswith("/static/"):
         return
     route = getattr(scope.get("route"), "path", None) or "unmatched"  # the template, never a token
-    duration_ms = round((time.perf_counter() - started) * 1000, 1)
+    now = time.perf_counter()
+    # duration_ms is the wait: until the response was sent. Background work
+    # after it (a Telegram confirmation, decision S1) shows as total_ms.
+    duration_ms = round(((responded or now) - started) * 1000, 1)
+    total_ms = round((now - started) * 1000, 1)
+    cost = request_cost_var.get()
+    extra_cost = {"db_calls": cost.calls if cost else 0, "db_ms": round(cost.ms, 1) if cost else 0.0}
+    if total_ms - duration_ms >= 5:
+        extra_cost["total_ms"] = total_ms
     request_logger.log(logging.ERROR if status >= 500 else logging.INFO, "%s %s %s %sms",
                        scope.get("method"), route, status, duration_ms, exc_info=exc_info, extra={
                            "event": "request", "method": scope.get("method"), "route": route,
-                           "status": status, "duration_ms": duration_ms})
+                           "status": status, "duration_ms": duration_ms, **extra_cost})
 
 
 class RequestContextMiddleware:
@@ -173,21 +228,25 @@ class RequestContextMiddleware:
         incoming = dict(scope.get("headers") or []).get(b"x-request-id", b"").decode("latin-1")
         request_id = incoming if _VALID_ID.fullmatch(incoming) else uuid.uuid4().hex
         token = request_id_var.set(request_id)
-        started, status = time.perf_counter(), 500
+        cost_token = request_cost_var.set(RequestCost())
+        started, status, responded = time.perf_counter(), 500, None
 
         async def send_with_id(message):
-            nonlocal status
+            nonlocal status, responded
             if message["type"] == "http.response.start":
                 status = message["status"]
                 message["headers"] = [*message.get("headers", []), (b"x-request-id", request_id.encode())]
             await send(message)
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                responded = time.perf_counter()
 
         try:
             await self.app(scope, receive, send_with_id)
         except Exception:
-            _log_request(scope, 500, started, exc_info=True)
+            _log_request(scope, 500, started, responded, exc_info=True)
             raise
         else:
-            _log_request(scope, status, started)
+            _log_request(scope, status, started, responded)
         finally:
+            request_cost_var.reset(cost_token)
             request_id_var.reset(token)

@@ -11,6 +11,7 @@ from motor.motor_asyncio import (
 )
 
 from app.config import Settings, get_settings
+from app.observability import DATABASE_COST
 
 logger = logging.getLogger("tm_pro.db")
 
@@ -58,6 +59,8 @@ async def connect_to_mongo(settings: Settings | None = None) -> AsyncIOMotorData
         # passed to .astimezone() is interpreted as the SERVER's local time,
         # which breaks DEBUGGING.md rule 4 the moment the host is not UTC.
         tz_aware=True,
+        # Each command is counted against its request (db_calls, db_ms; Batch 30).
+        event_listeners=[DATABASE_COST],
     )
     _database = _client[settings.mongo_db_name]
 
