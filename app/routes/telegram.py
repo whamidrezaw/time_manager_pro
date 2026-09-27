@@ -11,6 +11,7 @@ from app.config import Settings, get_settings
 from app.services.admin import ADMIN_COMMANDS, handle_admin_command, is_admin, remember_username
 from app.services.erasure import delete_user_data
 from app.services.reminders import handle_snooze_callback
+from app.services.telegram_bot import telegram_bot
 from app.utils.i18n import resolve_language, t
 from app.utils.keyboards import build_open_app_keyboard
 
@@ -49,10 +50,10 @@ async def telegram_webhook(
     if update.my_chat_member:
         await _handle_membership(update, settings)
     elif update.callback_query:
-        async with Bot(token=settings.bot_token) as bot:
+        async with telegram_bot(settings, Bot) as bot:
             await _handle_callback_query(update, bot)
     elif update.message:
-        async with Bot(token=settings.bot_token) as bot:
+        async with telegram_bot(settings, Bot) as bot:
             await _handle_message(update, bot, settings)
 
     return {"ok": True}
@@ -260,7 +261,7 @@ async def _handle_membership(update, settings) -> None:
         language = resolve_language(
             getattr(change.from_user, "language_code", None) if change.from_user else None
         )
-        async with Bot(token=settings.bot_token) as bot:
+        async with telegram_bot(settings, Bot) as bot:
             await bot.send_message(
                 chat_id=added_by,
                 text=t("chat_connected", language).format(

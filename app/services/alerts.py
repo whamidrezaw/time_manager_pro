@@ -17,6 +17,7 @@ from telegram import Bot
 
 from app.config import Settings, get_settings
 from app.db import get_database
+from app.services.telegram_bot import telegram_bot
 
 logger = logging.getLogger("tm_pro.alerts")
 
@@ -76,7 +77,7 @@ async def send_alert(kind: str, stats: dict, settings: Settings | None = None,
     if not settings.admin_chat_id:
         return False
     try:
-        async with Bot(token=settings.bot_token) as bot:
+        async with telegram_bot(settings, Bot) as bot:
             await bot.send_message(chat_id=settings.admin_chat_id, parse_mode="HTML",
                                    text=alert_text(kind, stats, since, now, runbook=settings.runbook_url))
     except Exception:

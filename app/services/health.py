@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
 from app.config import Settings, get_settings
 from app.db import get_events_collection
+from app.services.telegram_bot import telegram_bot
 from app.utils.dates import as_utc
 
 logger = logging.getLogger("tm_pro.health")
@@ -27,31 +29,25 @@ async def measure(settings: Settings | None = None) -> dict:
     stuck_cutoff = now - timedelta(minutes=15)
     day_ago = now - timedelta(hours=24)
 
-    overdue = await events.count_documents(
-        {"notify_status": "pending", "next_notify_at": {"$lt": overdue_cutoff}}
-    )
-    # A row left in "processing" means a run claimed it and died before it
-    # sent anything. recover_stale_processing puts those back, so a number
-    # here means that recovery is not running either.
-    stuck = await events.count_documents(
-        {"notify_status": "processing", "processing_started_at": {"$lt": stuck_cutoff}}
-    )
-    upcoming = await events.count_documents(
-        {"notify_status": "pending", "next_notify_at": {"$gte": now, "$lt": now + timedelta(hours=24)}}
-    )
-    sent_today = await events.count_documents(
-        {"notify_status": {"$in": ["pending", "done"]}, "updated_at": {"$gte": day_ago}}
-    )
-
-    # A permanently undeliverable reminder used to be invisible here, so a
-    # blocked bot looked exactly like a healthy queue.
-    failed = await events.count_documents({"notify_status": "failed"})
-    failed_recent = await events.count_documents({"notify_status": "failed", "updated_at": {"$gte": day_ago}})
-
-    worst = await events.find_one(
-        {"notify_status": "pending", "next_notify_at": {"$lt": overdue_cutoff}},
-        {"next_notify_at": 1},
-        sort=[("next_notify_at", 1)],
+    # Seven independent commands, sent at once: one after another they took
+    # seven round trips to the database, about a second (Batch 30, 31).
+    overdue, stuck, upcoming, sent_today, failed, failed_recent, worst = await asyncio.gather(
+        events.count_documents({"notify_status": "pending", "next_notify_at": {"$lt": overdue_cutoff}}),
+        # A row left in "processing" means a run claimed it and died before it
+        # sent anything. recover_stale_processing puts those back, so a number
+        # here means that recovery is not running either.
+        events.count_documents(
+            {"notify_status": "processing", "processing_started_at": {"$lt": stuck_cutoff}}),
+        events.count_documents(
+            {"notify_status": "pending", "next_notify_at": {"$gte": now, "$lt": now + timedelta(hours=24)}}),
+        events.count_documents(
+            {"notify_status": {"$in": ["pending", "done"]}, "updated_at": {"$gte": day_ago}}),
+        # A permanently undeliverable reminder used to be invisible here, so a
+        # blocked bot looked exactly like a healthy queue.
+        events.count_documents({"notify_status": "failed"}),
+        events.count_documents({"notify_status": "failed", "updated_at": {"$gte": day_ago}}),
+        events.find_one({"notify_status": "pending", "next_notify_at": {"$lt": overdue_cutoff}},
+                        {"next_notify_at": 1}, sort=[("next_notify_at", 1)]),
     )
     worst_minutes = 0
     if worst and worst.get("next_notify_at"):
@@ -104,7 +100,7 @@ async def send_report(settings: Settings | None = None) -> dict:
     try:
         from telegram import Bot
 
-        async with Bot(token=settings.bot_token) as bot:
+        async with telegram_bot(settings, Bot) as bot:
             await bot.send_message(
                 chat_id=settings.admin_chat_id,
                 text=format_report(stats),

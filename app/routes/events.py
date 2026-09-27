@@ -32,6 +32,7 @@ from app.services.events import (
     save_note_for_user,
     set_pin_for_user,
 )
+from app.services.telegram_bot import telegram_bot
 
 router = APIRouter(prefix="/api", tags=["events"])
 logger = logging.getLogger("tm_pro.events")
@@ -63,7 +64,7 @@ async def _confirm_in_telegram(user_id: str, title: str) -> None:
     """
     settings = get_settings()
     try:
-        async with Bot(token=settings.bot_token) as bot:
+        async with telegram_bot(settings, Bot) as bot:
             await bot.send_message(chat_id=user_id, text=f'✅ Event "{title}" was saved successfully.')
     except Exception as exc:
         logger.warning("Confirmation message failed: user_id=%s error=%s", user_id, exc)

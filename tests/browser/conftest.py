@@ -122,12 +122,12 @@ async def _inviter_name(user_id, settings=None) -> str:
 # Every module of the web app that talks to Telegram. The live server runs with
 # a stand-in in each; test_harness.py keeps this list complete.
 TELEGRAM_MODULES = (
-    "app.main",
     "app.routes.events",
     "app.routes.tasks",
     "app.routes.telegram",
     "app.services.alerts",
     "app.services.health",
+    "app.services.telegram_bot",
     "app.services.referrals",
 )
 

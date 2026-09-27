@@ -46,7 +46,9 @@ def test_every_module_that_talks_to_telegram_is_stood_in_for():
     talking = {
         ".".join(path.relative_to(ROOT).with_suffix("").parts)
         for path in (ROOT / "app").rglob("*.py")
-        if re.search(r"\bBot\(token=", path.read_text(encoding="utf-8"))
+        # A module builds a bot itself, or hands its own Bot to the shared-bot
+        # helper, which builds from it when the app started none (ADR 0019).
+        if re.search(r"\bBot\(token=|telegram_bot\(settings, Bot\)", path.read_text(encoding="utf-8"))
     }
     assert talking == set(harness.TELEGRAM_MODULES), (
         f"not stood in for: {sorted(talking - set(harness.TELEGRAM_MODULES))}")
