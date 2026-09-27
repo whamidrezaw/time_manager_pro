@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from telegram import Bot
 
 from app.config import get_settings
 from app.db import (
@@ -28,6 +27,7 @@ from app.routes.sharegroup import router as sharegroup_router
 from app.routes.tasks import router as tasks_router
 from app.routes.telegram import router as telegram_router
 from app.routes.web import router as web_router
+from app.services.telegram_bot import start_shared_bot, stop_shared_bot
 
 settings = get_settings()
 
@@ -45,13 +45,13 @@ async def lifespan(app: FastAPI):
     logger.info("Starting %s (%s)", settings.app_name, settings.app_env)
 
     try:
-        async with Bot(token=settings.bot_token) as bot:
-            me = await bot.get_me()
-            logger.info("Runtime bot = @%s id=%s", me.username, me.id)
+        # One bot for the app (ADR 0019); starting it already asked Telegram who it is.
+        bot = await start_shared_bot(settings)
+        logger.info("Runtime bot = @%s id=%s", bot.bot.username, bot.bot.id)
 
-            webhook_url = f"{settings.webapp_base_url}/telegram/webhook"
-            await bot.set_webhook(url=webhook_url, secret_token=settings.telegram_webhook_secret)
-            logger.info("Telegram webhook set to %s", webhook_url)
+        webhook_url = f"{settings.webapp_base_url}/telegram/webhook"
+        await bot.set_webhook(url=webhook_url, secret_token=settings.telegram_webhook_secret)
+        logger.info("Telegram webhook set to %s", webhook_url)
     except Exception as exc:
         logger.warning("Runtime bot verification/webhook setup failed: %s", exc)
 
@@ -67,6 +67,7 @@ async def lifespan(app: FastAPI):
         logger.exception("Startup migration failed; search or archiving may be incomplete")
 
     yield
+    await stop_shared_bot()
 
     await close_mongo_connection()
     logger.info("Stopped %s", settings.app_name)

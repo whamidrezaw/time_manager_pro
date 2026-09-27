@@ -9,6 +9,7 @@ from pymongo.errors import DuplicateKeyError
 from app.config import Settings, get_settings
 from app.db import get_events_collection, get_users_collection
 from app.services.admin import limit_status, runtime_settings
+from app.services.telegram_bot import telegram_bot
 from app.utils.keyboards import build_open_app_keyboard
 
 logger = logging.getLogger("tm_pro.referrals")
@@ -346,7 +347,7 @@ async def notify_referrer_bonus(referrer_id: str, valid_count: int) -> None:
     text = t("referral_bonus_granted", language).format(limit=limit)
 
     try:
-        async with Bot(token=settings.bot_token) as bot:
+        async with telegram_bot(settings, Bot) as bot:
             await bot.send_message(
                 chat_id=str(referrer_id),
                 text=text,

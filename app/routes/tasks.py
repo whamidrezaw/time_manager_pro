@@ -12,6 +12,7 @@ from app.observability import log_reminder_run
 from app.services.alerts import check_and_alert, ping_healthchecks, send_alert
 from app.services.health import measure, send_report
 from app.services.reminders import process_due_reminders, recover_stale_processing
+from app.services.telegram_bot import telegram_bot
 
 router = APIRouter(tags=["tasks"])
 logger = logging.getLogger("tm_pro.tasks")
@@ -60,7 +61,7 @@ async def run_reminders(x_tasks_secret: str | None = Header(default=None)) -> di
         mark = time.perf_counter()
         recovered = await recover_stale_processing(settings)
         mark = lap("recover_ms", mark)
-        async with Bot(token=settings.bot_token) as bot:
+        async with telegram_bot(settings, Bot) as bot:
             mark = lap("bot_start_ms", mark)
             processed = await process_due_reminders(bot, settings)
             mark = lap("process_ms", mark)
