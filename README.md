@@ -210,7 +210,9 @@ limiting, date and recurrence maths, the event API, and the webhook.
 
 ## Documentation
 
+- `CHANGELOG.md`: what changed in each version
 - `CONSTRAINTS.md`: the quality bar, with its numbers and decisions
+- `docs/RELEASE.md`: how a version is released, checked and rolled back
 - `SECURITY.md`: reporting a vulnerability, what is defended, the accepted risks
 - `docs/DEFINITION_OF_DONE.md`: what every change has to meet
 - `docs/adr/`: the architecture decisions, and why
