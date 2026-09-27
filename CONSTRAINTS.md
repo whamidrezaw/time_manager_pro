@@ -127,6 +127,16 @@ with no colour changed.
   once at the start, every six hours while it lasts, once at the end; a
   healthchecks.io ping per cron run. See ADR 0011 and ADR 0014.
 
+## Known debt
+
+Chosen to wait until after v1.0 (Batch 29, five-axis review), so the release
+is the code production has run. Each is to be split without changing what it
+does, under the tests that cover it now.
+
+- **Two long functions.** `process_due_reminders` (213 lines, cyclomatic
+  complexity 21) and `_normalize_event_input` (100 lines, 24).
+- **One large script.** `static/app.js` holds the whole interface in 2586 lines.
+
 ## Exceptions
 
 | ID | Rule | Path | Reason | Owner | Expires |

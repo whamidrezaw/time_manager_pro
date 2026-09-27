@@ -120,4 +120,10 @@ async def get_chat_member_status(chat_id: int, user_id: str,
 
     if not body.get("ok"):
         return ""
-    return str(body["result"].get("status") or "")
+    result = body["result"]
+    status = str(result.get("status") or "")
+    # A restricted user is in the chat only while is_member says so; one who
+    # left while restricted keeps the status (Bot API, ChatMemberRestricted).
+    if status == "restricted" and not result.get("is_member"):
+        return "left"
+    return status

@@ -12,6 +12,7 @@ from app.services.admin import ADMIN_COMMANDS, handle_admin_command, is_admin, r
 from app.services.erasure import delete_user_data
 from app.services.reminders import handle_snooze_callback
 from app.utils.i18n import resolve_language, t
+from app.utils.keyboards import build_open_app_keyboard
 
 logger = logging.getLogger("tm_pro.telegram")
 
@@ -55,16 +56,6 @@ async def telegram_webhook(
             await _handle_message(update, bot, settings)
 
     return {"ok": True}
-
-
-def build_open_app_keyboard(settings: Settings, language: str = "en") -> InlineKeyboardMarkup:
-    deep_link = (
-        f"https://t.me/{settings.telegram_bot_username}/"
-        f"{settings.telegram_mini_app_short_name}"
-    )
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(t("open_app_button", language), url=deep_link)]]
-    )
 
 
 def parse_command(text: str) -> str:

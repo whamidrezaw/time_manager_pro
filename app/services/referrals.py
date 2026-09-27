@@ -9,6 +9,7 @@ from pymongo.errors import DuplicateKeyError
 from app.config import Settings, get_settings
 from app.db import get_events_collection, get_users_collection
 from app.services.admin import limit_status, runtime_settings
+from app.utils.keyboards import build_open_app_keyboard
 
 logger = logging.getLogger("tm_pro.referrals")
 
@@ -325,7 +326,6 @@ async def notify_referrer_bonus(referrer_id: str, valid_count: int) -> None:
     """
     from telegram import Bot
 
-    from app.routes.telegram import build_open_app_keyboard
     from app.utils.i18n import t
 
     settings = get_settings()

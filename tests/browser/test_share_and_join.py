@@ -41,7 +41,10 @@ def test_joining_an_event_you_already_have_says_so_in_the_app(open_app):
     page = open_app(invite=True)
     alerts: list[str] = []
     page.on("dialog", lambda dialog: (alerts.append(dialog.message), dialog.dismiss()))
-    page.click("#inviteYes")
+    # The card closes once the join is back from the server: wait for that
+    # answer, not for a clock (ADR 0010; under a loaded run 5 s ran out).
+    with page.expect_response(lambda response: "/api/group/join" in response.url):
+        page.click("#inviteYes")
     expect(page.locator(".invite-overlay")).to_be_hidden(timeout=5000)
 
     page.reload()  # the same link, a second time

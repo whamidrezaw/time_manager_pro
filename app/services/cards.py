@@ -5,12 +5,12 @@ from datetime import date, datetime, timezone
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, features
 
 from app.utils.dates import as_utc
-from app.utils.i18n import category_label, t
+from app.utils.i18n import category_label, event_language, t
 
 logger = logging.getLogger("tm_pro.cards")
 
@@ -78,7 +78,7 @@ def _digits(value, rtl: bool) -> str:
 def _zone(name: str | None):
     try:
         return ZoneInfo(name or "UTC")
-    except Exception:
+    except (ZoneInfoNotFoundError, ValueError):  # an unknown or malformed name, not a bug
         return timezone.utc
 
 
@@ -185,8 +185,6 @@ def card_alt(event: dict) -> str:
     """The alt text of an event's card picture: its title and its countdown in
     the card's own words. One source for the public page, the share sheet and
     the join card, so the text always says what the picture shows."""
-    from app.services.reminders import event_language  # reminders imports this module
-
     return f"{event.get('title', '')} — {countdown_words(event, event_language(event))}"
 
 

@@ -179,6 +179,11 @@ _STRINGS: dict[str, dict[str, str]] = {
 }
 
 
+def event_language(evt: dict) -> str:
+    """The language an event's reminders and card are written in."""
+    return evt.get("lang") or DEFAULT_LANGUAGE
+
+
 def t(key: str, language: str = DEFAULT_LANGUAGE) -> str:
     """Look up a string, falling back to English and then to the key itself."""
     entry = _STRINGS.get(key)
